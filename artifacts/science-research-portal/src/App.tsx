@@ -729,7 +729,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
   const [insightFocus, setInsightFocus] = useState('');
   const askResearch = useAskGeminiResearch();
   const updateBinderPlan = useUpdateGeminiBinderPlan();
-  const analyzeBinderStructure = useAnalyzeGeminiBinderStructure();
+  const analyzeBinderStructure = useAnalyzeBinderStructure();
   const [tocAnalysis, setTocAnalysis] = useState<TocAnalysis | null>(() => 
     readStorage<TocAnalysis | null>(TOC_ANALYSIS_KEY, null)
   );
