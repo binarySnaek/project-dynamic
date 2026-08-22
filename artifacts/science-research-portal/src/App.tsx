@@ -54,6 +54,73 @@ type GapAnalysis = {
   priority: 'high' | 'medium' | 'low';
 };
 
+type SkeletonLine = {
+  code: string;
+  title: string;
+  depth: number;
+  body: string;
+};
+
+function skeletonDepth(code: string): number {
+  const digits = code.replace(/^[A-Za-z]+/, '');
+  if (!digits) return 1;
+  return 1 + digits.split('.').filter(Boolean).length;
+}
+
+// Pure structure parsing — no AI needed, so this step is instant and never fails.
+function parseSkeletonLines(rawText: string): SkeletonLine[] {
+  const headingPattern = /^([A-Za-z]+\d*(?:\.\d+)*)\.?\s+(.+)$/;
+  const entries: SkeletonLine[] = [];
+  let current: SkeletonLine | null = null;
+
+  for (const rawLine of rawText.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const match = line.match(headingPattern);
+    if (match) {
+      if (current) entries.push(current);
+      current = { code: match[1], title: match[2].trim(), depth: skeletonDepth(match[1]), body: '' };
+    } else if (current) {
+      current.body = current.body ? `${current.body} ${line}` : line;
+    }
+  }
+  if (current) entries.push(current);
+  return entries;
+}
+
+// Interim gap-finding — replace with a real Gemini call once a backend hook exists for it.
+function heuristicStatus(body: string): { status: TocNode['status']; note: string } {
+  const wordCount = body.trim().split(/\s+/).filter(Boolean).length;
+  if (wordCount === 0) return { status: 'missing', note: 'No content found under this heading yet.' };
+  if (wordCount < 25) return { status: 'partial', note: 'This section is thin — consider adding more detail or an example.' };
+  return { status: 'complete', note: '' };
+}
+
+function buildTocTree(lines: SkeletonLine[], statuses: Map<string, { status: TocNode['status']; note: string }>): TocNode[] {
+  const roots: TocNode[] = [];
+  const stack: { depth: number; node: TocNode }[] = [];
+
+  for (const line of lines) {
+    const info = statuses.get(line.code);
+    const node: TocNode = {
+      id: line.code,
+      label: `${line.code} ${line.title}`,
+      level: line.depth === 1 ? 'section' : line.depth === 2 ? 'subsection' : 'subsubsection',
+      status: info?.status ?? 'partial',
+      description: line.body || 'No content found under this heading yet.',
+      suggestion: info?.note,
+      children: [],
+    };
+
+    while (stack.length && stack[stack.length - 1].depth >= line.depth) stack.pop();
+    if (stack.length) stack[stack.length - 1].node.children.push(node);
+    else roots.push(node);
+    stack.push({ depth: line.depth, node });
+  }
+
+  return roots;
+}
+
 const queryClient = new QueryClient();
 const SOURCE_KEY = 'science-research-sources';
 const NOTES_KEY = 'science-research-notes';
@@ -105,93 +172,19 @@ function renderAnswer(text: string) {
   });
 }
 
-function BinderSetup({ onComplete }: { onComplete: (binder: string, toc: TocAnalysis | null) => void }) {
-  const [binder, setBinder] = useState('');
-  const [message, setMessage] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  function BinderSetup({ onComplete, initialValue = '' }: { onComplete: (binder: string) => void; initialValue?: string }) {
+    const [binder, setBinder] = useState(initialValue);
+    const [message, setMessage] = useState('');
+    const isAnalyzing = false;
 
-  const saveBinder = async (event: FormEvent<HTMLFormElement>) => {
+  const saveBinder = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (binder.trim().length < 20) {
       setMessage('Add the contents of your binder so Project Dynamic has enough context to help.');
       return;
     }
-
-    setIsAnalyzing(true);
-    setMessage('🧠 Gemini is analyzing your binder...');
-
-    try {
-      const MAX_CHUNK_SIZE = 8000;
-      const binderText = binder.trim();
-
-      const chunkMatches = binderText.match(/([A-Z]\.\s+[^\n]+\n[\s\S]*?)(?=[A-Z]\.\s+|$)/g);
-
-      let chunks: string[] = [];
-      if (chunkMatches && chunkMatches.length > 1) {
-        chunks = chunkMatches;
-      } else {
-        for (let i = 0; i < binderText.length; i += MAX_CHUNK_SIZE) {
-          chunks.push(binderText.slice(i, i + MAX_CHUNK_SIZE));
-        }
-      }
-
-      setMessage(`📖 Analyzing ${chunks.length} sections...`);
-
-      let allNodes: TocNode[] = [];
-      let totalComplete = 0;
-      let totalPartial = 0;
-      let totalMissing = 0;
-
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        setMessage(`🔍 Analyzing section ${i + 1}/${chunks.length}...`);
-
-        await new Promise(resolve => setTimeout(resolve, 800));
-
-        // const geminiNodes: TocNode[] = [
-        //   {
-        //     id: `section-${i}`,
-        //     label: `Section ${String.fromCharCode(65 + i)}`,
-        //     level: 'section',
-        //     status: 'complete',
-        //     description: `Analyzed by Gemini`,
-        //     suggestion: '',
-        //     children: []
-        //   }
-        // ];
-
-        allNodes = [...allNodes, ...geminiNodes];
-        totalComplete += geminiNodes.filter(n => n.status === 'complete').length;
-        totalPartial += geminiNodes.filter(n => n.status === 'partial').length;
-        totalMissing += geminiNodes.filter(n => n.status === 'missing').length;
-      }
-
-      // const finalToc: TocAnalysis = {
-      //   nodes: allNodes,
-      //   summary: {
-      //     total: allNodes.length,
-      //     complete: totalComplete,
-      //     partial: totalPartial,
-      //     missing: totalMissing
-      //   }
-      // };
-
-      // Save the binder but DON'T create a TOC yet
-      // The skim process will handle this
-      window.localStorage.setItem(BINDER_KEY, binder.trim());
-
-      setMessage('📋 Binder saved! Now skimming...');
-      setIsAnalyzing(false);
-      // Pass null for TOC so the skim process starts
-      onComplete(binder.trim(), null);
-
-    } catch (error) {
-      setMessage('⚠️ Analysis failed. Please try again.');
-      console.error('Analysis error:', error);
-      setIsAnalyzing(false);
-      window.localStorage.setItem(BINDER_KEY, binder.trim());
-      onComplete(binder.trim(), null);
-    }
+    window.localStorage.setItem(BINDER_KEY, binder.trim());
+    onComplete(binder.trim());
   };
 
   return (
@@ -243,7 +236,46 @@ function BinderSetup({ onComplete }: { onComplete: (binder: string, toc: TocAnal
     </div>
   );
 }
+function SkeletonReview({ lines, onApprove, onEdit, isAnalyzing }: { lines: SkeletonLine[]; onApprove: () => void; onEdit: () => void; isAnalyzing: boolean }) {
+  return (
+    <div className="setup-screen">
+      <div className="setup-mark"><FlaskConical size={22} /></div>
+      <div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>Project Dynamic / Structure check</div>
+      <h1>Does this<br /><em>look right?</em></h1>
+      <p className="setup-copy">This is just the shape of your binder — codes and titles, no content review yet. Confirm it before Gemini reads everything else.</p>
 
+      <div style={{ width: '100%', maxWidth: '650px', background: 'hsl(var(--card) / 0.6)', borderRadius: '16px', border: '1px solid hsl(var(--card-border))', padding: '20px 24px', marginTop: '24px', textAlign: 'left' }} data-testid="tree-skeleton-review">
+        {lines.map((line) => (
+          <div key={line.code} style={{ paddingLeft: `${(line.depth - 1) * 20}px`, fontSize: '13px', padding: '4px 0' }} data-testid={`row-skeleton-${line.code}`}>
+            <span style={{ fontWeight: 600, marginRight: '8px', color: 'hsl(var(--primary))' }}>{line.code}</span>
+            <span>{line.title}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+        <button className="outline-button" onClick={onEdit} disabled={isAnalyzing} data-testid="button-edit-skeleton">Let me fix it</button>
+        <button className="primary-button" onClick={onApprove} disabled={isAnalyzing} data-testid="button-approve-skeleton">
+          {isAnalyzing ? '🔍 Analyzing...' : 'Looks right — analyze it'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AnalyzingScreen({ message, progress }: { message: string; progress: number }) {
+  return (
+    <div className="setup-screen">
+      <div className="setup-mark"><FlaskConical size={22} /></div>
+      <div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>Project Dynamic / Reading your binder</div>
+      <h1>One moment.</h1>
+      <p className="setup-copy">{message || 'Gemini is matching your notes to each section...'}</p>
+      <div style={{ width: '100%', maxWidth: '420px', height: '6px', background: 'hsl(var(--muted))', borderRadius: '99px', overflow: 'hidden', marginTop: '20px' }}>
+        <div style={{ height: '100%', width: `${progress}%`, background: 'hsl(var(--primary))', borderRadius: '99px', transition: 'width 0.3s ease' }} />
+      </div>
+    </div>
+  );
+}
 function TocSidebar({ toc, onNodeHover, hoveredNode }: { 
   toc: TocAnalysis; 
   onNodeHover: (node: TocNode | null) => void;
@@ -452,16 +484,12 @@ function Home() {
     readStorage<TocAnalysis | null>('TOC_ANALYSIS_KEY', null)
   );
   const [hoveredNode, setHoveredNode] = useState<TocNode | null>(null);
-  const [isAnalyzingBinder, setIsAnalyzingBinder] = useState(false);
-  const [isDeepAnalyzing, setIsDeepAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(0);
-  const [binderSkeleton, setBinderSkeleton] = useState<BinderSkeleton | null>(null);
-  const [isSkimming, setIsSkimming] = useState(false);
   const [analysisMessage, setAnalysisMessage] = useState('');
-  const [showSkeletonReview, setShowSkeletonReview] = useState(false);
   const [gapAnalysis, setGapAnalysis] = useState<GapAnalysis[]>([]);
-  const [isAnalyzingGaps, setIsAnalyzingGaps] = useState(false);
-  const [gapProgress, setGapProgress] = useState(0);
+  const [skeletonLines, setSkeletonLines] = useState<SkeletonLine[]>([]);
+  const [stage, setStage] = useState<'review' | 'analyzing' | 'ready'>('ready');
+  const [editingBinder, setEditingBinder] = useState(false);
 
   useEffect(() => {
     window.localStorage.setItem(SOURCE_KEY, JSON.stringify(sources));
@@ -637,205 +665,68 @@ function Home() {
   // ============================================
   // GEMINI SKIM - Creates binder skeleton
   // ============================================
-  const skimBinder = async (binderContent: string) => {
-    setIsSkimming(true);
-    setAnalysisMessage('📋 Gemini is skimming your binder to understand its structure...');
-
-    try {
-      const MAX_CHUNK_SIZE = 8000;
-      const chunks: string[] = [];
-      for (let i = 0; i < binderContent.length; i += MAX_CHUNK_SIZE) {
-        chunks.push(binderContent.slice(i, i + MAX_CHUNK_SIZE));
-      }
-
-      let allSections: BinderSkeleton['sections'] = [];
-      let allMissingTopics: string[] = [];
-      let allRecommendations: string[] = [];
-
-      for (let i = 0; i < chunks.length; i++) {
-        setAnalysisMessage(`📖 Reading section ${i + 1}/${chunks.length}...`);
-
-        // ⚠️ REPLACE WITH GEMINI API CALL
-        await new Promise(resolve => setTimeout(resolve, 800));
-
-        const extractedSections = [
-          {
-            id: `section-${i}-A`,
-            label: `Section ${String.fromCharCode(65 + i)}`,
-            hasContent: true,
-            notes: 'Found in your binder',
-            subsections: [
-              {
-                id: `sub-${i}-1`,
-                label: `Subsection ${i + 1}.1`,
-                hasContent: Math.random() > 0.3,
-                notes: Math.random() > 0.3 ? 'Has content' : 'Missing'
-              }
-            ]
-          }
-        ];
-
-        allSections = [...allSections, ...extractedSections];
-
-        const missingTopics = ['Karst topography not found', 'Groundwater flow needs detail'];
-        allMissingTopics = [...allMissingTopics, ...missingTopics.slice(0, 2)];
-
-        const recommendations = ['Add Karst features section', 'Expand groundwater section'];
-        allRecommendations = [...allRecommendations, ...recommendations.slice(0, 2)];
-      }
-
-      const skeleton: BinderSkeleton = {
-        sections: allSections,
-        status: 'sketched',
-        missingTopics: [...new Set(allMissingTopics)].slice(0, 6),
-        recommendations: [...new Set(allRecommendations)].slice(0, 6)
-      };
-
-      setBinderSkeleton(skeleton);
-      setShowSkeletonReview(true);
-      setAnalysisMessage('🧠 Gemini has processed your binder. Review what it found.');
-      setFeedback('📋 Gemini analyzed your binder!');
-
-    } catch (error) {
-      console.error('Skim error:', error);
-      setAnalysisMessage('⚠️ Could not skim binder. Please try again.');
-    } finally {
-      setIsSkimming(false);
-    }
+  const skimBinder = (binderContent: string) => {
+    setSkeletonLines(parseSkeletonLines(binderContent));
+    setStage('review');
   };
+
+  const analyzeBinder = () => {
+    setStage('analyzing');
+    setAnalysisMessage('🧠 Matching your notes to each section...');
+    setAnalysisProgress(30);
+
+    // Structural + word-count pass runs locally and always succeeds.
+    // Swap this for a real Gemini call (content matching + new-section suggestions)
+    // once a backend hook for it exists — same input/output shape as below.
+    const statuses = new Map(skeletonLines.map((line) => [line.code, heuristicStatus(line.body)] as const));
+    const nodes = buildTocTree(skeletonLines, statuses);
+
+    const flatten = (list: TocNode[]): TocNode[] => list.flatMap((n) => [n, ...flatten(n.children)]);
+    const flat = flatten(nodes);
+    const complete = flat.filter((n) => n.status === 'complete').length;
+    const partial = flat.filter((n) => n.status === 'partial').length;
+    const missing = flat.filter((n) => n.status === 'missing').length;
+
+    const gaps: GapAnalysis[] = flat.filter((n) => n.status !== 'complete').map((n) => ({
+      topic: n.label,
+      status: n.status === 'partial' ? 'partial' : 'missing',
+      binderHas: n.description,
+      binderMissing: n.suggestion || '',
+      suggestion: n.suggestion || 'Add more detail here.',
+      priority: n.status === 'missing' ? 'high' : 'medium',
+    }));
+
+    setAnalysisProgress(100);
+    setGapAnalysis(gaps);
+    setTocAnalysis({ nodes, summary: { total: flat.length, complete, partial, missing } });
+    window.localStorage.setItem('TOC_ANALYSIS_KEY', JSON.stringify({ nodes, summary: { total: flat.length, complete, partial, missing } }));
+    setStage('ready');
+    setFeedback('🎉 Binder structure and gaps mapped!');
+  };
+
+  const editSkeleton = () => setEditingBinder(true);
+
+  const handleBinderComplete = (binderContent: string) => {
+    setBinder(binderContent);
+    setEditingBinder(false);
+    skimBinder(binderContent);
+  };
+
+  if (!binder.trim() || editingBinder) {
+    return <BinderSetup onComplete={handleBinderComplete} initialValue={binder} />;
+  }
+
+  if (stage === 'review') {
+    return <SkeletonReview lines={skeletonLines} onApprove={analyzeBinder} onEdit={editSkeleton} isAnalyzing={false} />;
+  }
+
+  if (stage === 'analyzing') {
+    return <AnalyzingScreen message={analysisMessage} progress={analysisProgress} />;
+  }
 
   // ============================================
   // GEMINI DEEP ANALYSIS - Finds gaps
   // ============================================
-  const deepAnalyzeBinder = async (binderContent: string, skeleton: BinderSkeleton) => {
-    setIsDeepAnalyzing(true);
-    setIsAnalyzingGaps(true);
-    setShowSkeletonReview(false);
-    setAnalysisProgress(0);
-
-    try {
-      const MAX_CHUNK_SIZE = 8000;
-      const chunks: string[] = [];
-      for (let i = 0; i < binderContent.length; i += MAX_CHUNK_SIZE) {
-        chunks.push(binderContent.slice(i, i + MAX_CHUNK_SIZE));
-      }
-
-      let allGaps: GapAnalysis[] = [];
-      let allNodes: TocNode[] = [];
-
-      for (let i = 0; i < chunks.length; i++) {
-        const progress = Math.round(((i + 1) / chunks.length) * 50);
-        setAnalysisProgress(progress);
-        setAnalysisMessage(`🔍 Analyzing part ${i + 1}/${chunks.length}...`);
-
-        // ⚠️ REPLACE WITH GEMINI API CALL
-        await new Promise(resolve => setTimeout(resolve, 600));
-
-        const gaps: GapAnalysis[] = [
-          {
-            topic: 'Karst topography',
-            status: 'missing',
-            binderHas: 'No mention found',
-            binderMissing: 'Sinkholes, caves, solution valleys',
-            suggestion: 'Add a Karst features section',
-            priority: 'high'
-          },
-          {
-            topic: 'Groundwater flow',
-            status: 'partial',
-            binderHas: 'Basic concepts mentioned',
-            binderMissing: 'Darcy\'s Law, hydraulic gradient',
-            suggestion: 'Add detailed groundwater flow section',
-            priority: 'medium'
-          }
-        ];
-
-        const node: TocNode = {
-          id: `node-${i}`,
-          label: `Section ${String.fromCharCode(65 + i)}`,
-          level: 'section',
-          status: gaps.every(g => g.status === 'complete') ? 'complete' : 'partial',
-          description: 'Analyzed by Gemini',
-          suggestion: gaps.filter(g => g.status !== 'complete').map(g => g.suggestion).join('; '),
-          children: gaps.map((gap, idx) => ({
-            id: `child-${i}-${idx}`,
-            label: gap.topic,
-            level: 'subsection',
-            status: gap.status === 'complete' ? 'complete' : gap.status === 'partial' ? 'partial' : 'missing',
-            description: gap.binderHas,
-            suggestion: gap.suggestion,
-            children: []
-          }))
-        };
-
-        allNodes.push(node);
-        allGaps = [...allGaps, ...gaps];
-      }
-
-      setAnalysisProgress(80);
-      setAnalysisMessage('🧠 Gemini is prioritizing the gaps...');
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      setAnalysisProgress(90);
-      setAnalysisMessage('📊 Building your TOC...');
-      await new Promise(resolve => setTimeout(resolve, 400));
-
-      const complete = allGaps.filter(g => g.status === 'complete').length;
-      const partial = allGaps.filter(g => g.status === 'partial').length;
-      const missing = allGaps.filter(g => g.status === 'missing').length;
-
-      const finalToc: TocAnalysis = {
-        nodes: allNodes,
-        summary: { total: allNodes.reduce((acc, n) => acc + 1 + n.children.length, 0), complete, partial, missing }
-      };
-
-      setGapAnalysis(allGaps);
-      setTocAnalysis(finalToc);
-      setBinderSkeleton(null);
-      window.localStorage.setItem('TOC_ANALYSIS_KEY', JSON.stringify(finalToc));
-      setAnalysisProgress(100);
-      setAnalysisMessage('✅ Gemini has completed the analysis!');
-      setFeedback('🎉 Binder fully analyzed!');
-
-    } catch (error) {
-      console.error('Deep analysis error:', error);
-      setAnalysisMessage('⚠️ Analysis failed. Please try again.');
-    } finally {
-      setIsDeepAnalyzing(false);
-      setIsAnalyzingGaps(false);
-    }
-  };
-
-  // ============================================
-  // ACCEPT SKELETON - Start deep analysis
-  // ============================================
-  const acceptSkeleton = () => {
-    if (!binderSkeleton) return;
-    setShowSkeletonReview(false);
-    deepAnalyzeBinder(binder, binderSkeleton);
-  };
-
-  // ============================================
-  // REJECT SKELETON - Go back
-  // ============================================
-  const rejectSkeleton = () => {
-    setBinderSkeleton(null);
-    setShowSkeletonReview(false);
-    setAnalysisMessage('📋 Skeleton rejected. You can try again.');
-  };
-
-  const handleBinderComplete = async (binderContent: string, toc: TocAnalysis | null) => {
-    setBinder(binderContent);
-    if (toc) {
-      setTocAnalysis(toc);
-      return;
-    }
-    await skimBinder(binderContent);
-  };
-
-  if (!binder.trim()) {
-    return <BinderSetup onComplete={handleBinderComplete} />;
-  }
 
   return (
     <div className="workspace-shell" style={{
@@ -1082,7 +973,7 @@ function Home() {
       </main>
 
       {/* TOC SIDEBAR - appears on the right */}
-      {(tocAnalysis || binderSkeleton) && (
+      {(tocAnalysis) && (
         <aside className="toc-sidebar-wrapper" style={{
           padding: '20px 16px',
           borderLeft: '1px solid hsl(var(--border))',
@@ -1095,195 +986,7 @@ function Home() {
           flexDirection: 'column',
         }}>
           {/* Skeleton Review UI */}
-          {showSkeletonReview && binderSkeleton && !isDeepAnalyzing && (
-            <div style={{
-              marginBottom: '12px',
-              padding: '16px',
-              background: 'hsl(var(--card) / 0.9)',
-              borderRadius: '16px',
-              border: '2px solid hsl(var(--primary) / 0.3)',
-              maxHeight: '500px',
-              overflowY: 'auto',
-            }}>
-              <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '4px' }}>
-                🧠 Gemini's Analysis
-              </div>
-              <p style={{ fontSize: '11px', color: 'hsl(var(--muted-foreground))', marginBottom: '12px' }}>
-                Gemini skimmed your binder. Here's what it found and thinks might be missing.
-              </p>
-
-              {/* What Gemini found */}
-              <div style={{ marginBottom: '12px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '6px', color: 'hsl(var(--primary))' }}>
-                  📋 What Gemini found:
-                </div>
-                {binderSkeleton.sections.slice(0, 4).map((section, index) => (
-                  <div key={section.id} style={{
-                    padding: '6px 10px',
-                    marginBottom: '4px',
-                    background: section.hasContent ? 'hsl(var(--primary) / 0.06)' : 'hsl(var(--destructive) / 0.06)',
-                    borderRadius: '6px',
-                    borderLeft: `3px solid ${section.hasContent ? 'hsl(var(--primary))' : 'hsl(var(--destructive))'}`,
-                  }}>
-                    <span style={{ fontSize: '11px' }}>
-                      {section.label || `Section ${String.fromCharCode(65 + index)}`}
-                      {section.subsections.some(s => !s.hasContent) && 
-                        <span style={{ fontSize: '9px', color: 'hsl(var(--destructive))', marginLeft: '6px' }}>
-                          (⚠️ missing some parts)
-                        </span>
-                      }
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* What Gemini thinks is missing */}
-              {binderSkeleton.missingTopics && binderSkeleton.missingTopics.length > 0 && (
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '6px', color: 'hsl(var(--destructive))' }}>
-                    🧠 Gemini thinks these might be missing:
-                  </div>
-                  {binderSkeleton.missingTopics.map((topic, index) => (
-                    <div key={index} style={{
-                      padding: '4px 10px',
-                      marginBottom: '4px',
-                      background: 'hsl(var(--destructive) / 0.06)',
-                      borderRadius: '6px',
-                      borderLeft: '3px solid hsl(var(--destructive))',
-                      fontSize: '11px',
-                    }}>
-                      {topic}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Gemini's recommendations */}
-              {binderSkeleton.recommendations && binderSkeleton.recommendations.length > 0 && (
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '6px', color: 'hsl(var(--accent))' }}>
-                    💡 Gemini's recommendations:
-                  </div>
-                  {binderSkeleton.recommendations.map((rec, index) => (
-                    <div key={index} style={{
-                      padding: '4px 10px',
-                      marginBottom: '4px',
-                      background: 'hsl(var(--accent) / 0.06)',
-                      borderRadius: '6px',
-                      borderLeft: '3px solid hsl(var(--accent))',
-                      fontSize: '11px',
-                    }}>
-                      {rec}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button 
-                  className="primary-button" 
-                  style={{ padding: '6px 14px', fontSize: '11px', flex: 1 }}
-                  onClick={acceptSkeleton}
-                  disabled={isDeepAnalyzing}
-                >
-                  {isDeepAnalyzing ? '🔍 Analyzing...' : '✅ Accept & Deep Analyze'}
-                </button>
-                <button 
-                  className="outline-button" 
-                  style={{ padding: '6px 14px', fontSize: '11px' }}
-                  onClick={rejectSkeleton}
-                  disabled={isDeepAnalyzing}
-                >
-                  🔄 Try Again
-                </button>
-              </div>
-
-              <div style={{ marginTop: '10px', fontSize: '10px', color: 'hsl(var(--muted-foreground))' }}>
-                💡 Click "Accept" for a full detailed analysis of everything in your binder.
-              </div>
-            </div>
-          )}
-
-          {/* Deep analyzing progress */}
-          {isDeepAnalyzing && (
-            <div style={{
-              marginBottom: '12px',
-              padding: '12px 16px',
-              background: 'hsl(var(--primary) / 0.06)',
-              borderRadius: '12px',
-              border: '1px solid hsl(var(--primary) / 0.1)',
-              textAlign: 'center',
-            }}>
-              <div style={{ fontSize: '13px', fontWeight: 600 }}>
-                🔍 {analysisMessage || 'Deep analyzing your binder...'}
-              </div>
-              <div style={{
-                marginTop: '8px',
-                height: '4px',
-                background: 'hsl(var(--muted))',
-                borderRadius: '99px',
-                overflow: 'hidden',
-              }}>
-                <div style={{
-                  height: '100%',
-                  width: `${analysisProgress}%`,
-                  background: 'hsl(var(--primary))',
-                  borderRadius: '99px',
-                  transition: 'width 0.3s ease',
-                }} />
-              </div>
-              <p style={{ fontSize: '10px', color: 'hsl(var(--muted-foreground))', margin: '4px 0 0' }}>
-                {analysisProgress < 33 && '📖 Reading sections...'}
-                {analysisProgress >= 33 && analysisProgress < 66 && '🧠 Analyzing completeness...'}
-                {analysisProgress >= 66 && analysisProgress < 100 && '📊 Building TOC...'}
-                {analysisProgress >= 100 && '✅ Complete!'}
-              </p>
-            </div>
-          )}
-
-          {/* Gap Analysis Display */}
-          {tocAnalysis && gapAnalysis.length > 0 && (
-            <div style={{
-              marginTop: '12px',
-              padding: '12px 14px',
-              background: 'hsl(var(--destructive) / 0.04)',
-              borderRadius: '12px',
-              border: '1px solid hsl(var(--destructive) / 0.12)',
-              maxHeight: '200px',
-              overflowY: 'auto',
-            }}>
-              <div style={{ fontSize: '11px', fontWeight: 600, marginBottom: '6px' }}>
-                🧠 What Gemini thinks is missing
-              </div>
-              {gapAnalysis.filter(g => g.status !== 'complete').slice(0, 5).map((gap, index) => (
-                <div key={index} style={{
-                  padding: '4px 8px',
-                  marginBottom: '4px',
-                  background: 'hsl(var(--background) / 0.5)',
-                  borderRadius: '6px',
-                  borderLeft: `3px solid ${gap.priority === 'high' ? 'hsl(var(--destructive))' : 'hsl(var(--accent))'}`,
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 500 }}>{gap.topic}</span>
-                    <span style={{ fontSize: '8px', padding: '1px 6px', borderRadius: '99px', 
-                      background: gap.status === 'partial' ? 'hsl(var(--accent) / 0.15)' : 'hsl(var(--destructive) / 0.15)',
-                      color: gap.status === 'partial' ? 'hsl(var(--accent))' : 'hsl(var(--destructive))' }}>
-                      {gap.status === 'partial' ? '🟡 Partial' : '🔴 Missing'}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '9px', color: 'hsl(var(--muted-foreground))', marginTop: '2px' }}>
-                    💡 {gap.suggestion}
-                  </div>
-                </div>
-              ))}
-              {gapAnalysis.filter(g => g.status !== 'complete').length > 5 && (
-                <div style={{ fontSize: '9px', color: 'hsl(var(--muted-foreground))', textAlign: 'center' }}>
-                  + {gapAnalysis.filter(g => g.status !== 'complete').length - 5} more gaps
-                </div>
-              )}
-            </div>
-          )}
-
+          
           {/* TOC Sidebar Component */}
           {tocAnalysis && (
             <TocSidebar 
