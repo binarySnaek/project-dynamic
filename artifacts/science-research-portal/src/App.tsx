@@ -26,6 +26,32 @@ type TocAnalysis = {
     missing: number;
   };
 };
+type BinderSkeleton = {
+  sections: {
+    id: string;
+    label: string;
+    hasContent: boolean;
+    notes: string;
+    subsections: {
+      id: string;
+      label: string;
+      hasContent: boolean;
+      notes: string;
+    }[];
+  }[];
+  status: 'sketched' | 'reviewing' | 'analyzed';
+  missingTopics?: string[];
+  recommendations?: string[];
+};
+
+type GapAnalysis = {
+  topic: string;
+  status: 'complete' | 'partial' | 'missing';
+  binderHas: string;
+  binderMissing: string;
+  suggestion: string;
+  priority: 'high' | 'medium' | 'low';
+};
 type TocEdit = {
   type: 'add' | 'delete' | 'rename';
   nodeId: string;
@@ -430,7 +456,9 @@ function TocSidebar({ toc, onNodeHover, hoveredNode }: {
   );
 }
 function Home() {
-  
+  // ============================================
+  // GEMINI GAP ANALYSIS STATE
+  // ============================================
   const [question, setQuestion] = useState('');
   const [subject, setSubject] = useState('');
   const [context, setContext] = useState('');
@@ -456,9 +484,15 @@ function Home() {
   const [hoveredNode, setHoveredNode] = useState<TocNode | null>(null);
   const [isAnalyzingBinder, setIsAnalyzingBinder] = useState(false);
   const [tocDraft, setTocDraft] = useState<TocAnalysis | null>(null);
-  const [isSkimming, setIsSkimming] = useState(false);
   const [isDeepAnalyzing, setIsDeepAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [binderSkeleton, setBinderSkeleton] = useState<BinderSkeleton | null>(null);
+  const [isSkimming, setIsSkimming] = useState(false);
+  const [analysisMessage, setAnalysisMessage] = useState('');
+  const [showSkeletonReview, setShowSkeletonReview] = useState(false);
+  const [gapAnalysis, setGapAnalysis] = useState<GapAnalysis[]>([]);
+  const [isAnalyzingGaps, setIsAnalyzingGaps] = useState(false);
+  const [gapProgress, setGapProgress] = useState(0);
   useEffect(() => {
     window.localStorage.setItem(SOURCE_KEY, JSON.stringify(sources));
   }, [sources]);
@@ -478,7 +512,7 @@ function Home() {
     const timeout = window.setTimeout(() => setFeedback(''), 2600);
     return () => window.clearTimeout(timeout);
   }, [feedback]);
-
+  
   const submitQuestion = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedQuestion = question.trim();
@@ -628,6 +662,178 @@ function Home() {
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  // ============================================
+  // GEMINI SKIM - Creates binder skeleton
+  // ============================================
+  const skimBinder = async (binderContent: string) => {
+    setIsSkimming(true);
+    setAnalysisMessage('📋 Gemini is skimming your binder to understand its structure...');
+
+    try {
+      const MAX_CHUNK_SIZE = 8000;
+      const chunks: string[] = [];
+      for (let i = 0; i < binderContent.length; i += MAX_CHUNK_SIZE) {
+        chunks.push(binderContent.slice(i, i + MAX_CHUNK_SIZE));
+      }
+
+      let allSections: BinderSkeleton['sections'] = [];
+      let allMissingTopics: string[] = [];
+      let allRecommendations: string[] = [];
+
+      for (let i = 0; i < chunks.length; i++) {
+        setAnalysisMessage(`📖 Reading section ${i + 1}/${chunks.length}...`);
+
+        // ⚠️ REPLACE WITH GEMINI API CALL
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        // Demo data - Gemini would return real data
+        const extractedSections = [
+          {
+            id: `section-${i}-A`,
+            label: `Section ${String.fromCharCode(65 + i)}`,
+            hasContent: true,
+            notes: 'Found in your binder',
+            subsections: [
+              {
+                id: `sub-${i}-1`,
+                label: `Subsection ${i + 1}.1`,
+                hasContent: Math.random() > 0.3,
+                notes: Math.random() > 0.3 ? 'Has content' : 'Missing'
+              }
+            ]
+          }
+        ];
+
+        allSections = [...allSections, ...extractedSections];
+
+        const missingTopics = ['Karst topography not found', 'Groundwater flow needs detail'];
+        allMissingTopics = [...allMissingTopics, ...missingTopics.slice(0, 2)];
+
+        const recommendations = ['Add Karst features section', 'Expand groundwater section'];
+        allRecommendations = [...allRecommendations, ...recommendations.slice(0, 2)];
+      }
+
+      const skeleton: BinderSkeleton = {
+        sections: allSections,
+        status: 'sketched',
+        missingTopics: [...new Set(allMissingTopics)].slice(0, 6),
+        recommendations: [...new Set(allRecommendations)].slice(0, 6)
+      };
+
+      setBinderSkeleton(skeleton);
+      setShowSkeletonReview(true);
+      setAnalysisMessage('🧠 Gemini has processed your binder. Review what it found.');
+      setFeedback('📋 Gemini analyzed your binder!');
+
+    } catch (error) {
+      console.error('Skim error:', error);
+      setAnalysisMessage('⚠️ Could not skim binder. Please try again.');
+    } finally {
+      setIsSkimming(false);
+    }
+  };
+  // ============================================
+  // GEMINI DEEP ANALYSIS - Finds gaps
+  // ============================================
+  const deepAnalyzeBinder = async (binderContent: string, skeleton: BinderSkeleton) => {
+    setIsDeepAnalyzing(true);
+    setIsAnalyzingGaps(true);
+    setShowSkeletonReview(false);
+    setAnalysisProgress(0);
+
+    try {
+      const MAX_CHUNK_SIZE = 8000;
+      const chunks: string[] = [];
+      for (let i = 0; i < binderContent.length; i += MAX_CHUNK_SIZE) {
+        chunks.push(binderContent.slice(i, i + MAX_CHUNK_SIZE));
+      }
+
+      let allGaps: GapAnalysis[] = [];
+      let allNodes: TocNode[] = [];
+
+      for (let i = 0; i < chunks.length; i++) {
+        const progress = Math.round(((i + 1) / chunks.length) * 50);
+        setAnalysisProgress(progress);
+        setAnalysisMessage(`🔍 Analyzing part ${i + 1}/${chunks.length}...`);
+
+        // ⚠️ REPLACE WITH GEMINI API CALL
+        await new Promise(resolve => setTimeout(resolve, 600));
+
+        // Demo data - Gemini would return real analysis
+        const gaps: GapAnalysis[] = [
+          {
+            topic: 'Karst topography',
+            status: 'missing',
+            binderHas: 'No mention found',
+            binderMissing: 'Sinkholes, caves, solution valleys',
+            suggestion: 'Add a Karst features section',
+            priority: 'high'
+          },
+          {
+            topic: 'Groundwater flow',
+            status: 'partial',
+            binderHas: 'Basic concepts mentioned',
+            binderMissing: 'Darcy\'s Law, hydraulic gradient',
+            suggestion: 'Add detailed groundwater flow section',
+            priority: 'medium'
+          }
+        ];
+
+        const node: TocNode = {
+          id: `node-${i}`,
+          label: `Section ${String.fromCharCode(65 + i)}`,
+          level: 'section',
+          status: gaps.every(g => g.status === 'complete') ? 'complete' : 'partial',
+          description: 'Analyzed by Gemini',
+          suggestion: gaps.filter(g => g.status !== 'complete').map(g => g.suggestion).join('; '),
+          children: gaps.map((gap, idx) => ({
+            id: `child-${i}-${idx}`,
+            label: gap.topic,
+            level: 'subsection',
+            status: gap.status === 'complete' ? 'complete' : gap.status === 'partial' ? 'partial' : 'missing',
+            description: gap.binderHas,
+            suggestion: gap.suggestion,
+            children: []
+          }))
+        };
+
+        allNodes.push(node);
+        allGaps = [...allGaps, ...gaps];
+      }
+
+      setAnalysisProgress(80);
+      setAnalysisMessage('🧠 Gemini is prioritizing the gaps...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      setAnalysisProgress(90);
+      setAnalysisMessage('📊 Building your TOC...');
+      await new Promise(resolve => setTimeout(resolve, 400));
+
+      const complete = allGaps.filter(g => g.status === 'complete').length;
+      const partial = allGaps.filter(g => g.status === 'partial').length;
+      const missing = allGaps.filter(g => g.status === 'missing').length;
+
+      const finalToc: TocAnalysis = {
+        nodes: allNodes,
+        summary: { total: allNodes.reduce((acc, n) => acc + 1 + n.children.length, 0), complete, partial, missing }
+      };
+
+      setGapAnalysis(allGaps);
+      setTocAnalysis(finalToc);
+      setBinderSkeleton(null);
+      window.localStorage.setItem('TOC_ANALYSIS_KEY', JSON.stringify(finalToc));
+      setAnalysisProgress(100);
+      setAnalysisMessage('✅ Gemini has completed the analysis!');
+      setFeedback('🎉 Binder fully analyzed!');
+
+    } catch (error) {
+      console.error('Deep analysis error:', error);
+      setAnalysisMessage('⚠️ Analysis failed. Please try again.');
+    } finally {
+      setIsDeepAnalyzing(false);
+      setIsAnalyzingGaps(false);
+    }
   };
   // Get a completely blank template - just empty sections
   function getBlankDynamicPlanetToc(): TocNode[] {
@@ -901,11 +1107,32 @@ function Home() {
       },
     ];
   }
-  const handleBinderComplete = (binderContent: string, toc: TocAnalysis | null) => {
+  // ============================================
+  // ACCEPT SKELETON - Start deep analysis
+  // ============================================
+  const acceptSkeleton = () => {
+    if (!binderSkeleton) return;
+    setShowSkeletonReview(false);
+    deepAnalyzeBinder(binder, binderSkeleton);
+  };
+  
+  // ============================================
+  // REJECT SKELETON - Go back
+  // ============================================
+  const rejectSkeleton = () => {
+    setBinderSkeleton(null);
+    setShowSkeletonReview(false);
+    setAnalysisMessage('📋 Skeleton rejected. You can try again.');
+  };
+  
+  const handleBinderComplete = async (binderContent: string, toc: TocAnalysis | null) => {
     setBinder(binderContent);
     if (toc) {
       setTocAnalysis(toc);
+      return;
     }
+    // Start the skim process
+    await skimBinder(binderContent);
   };
 
   if (!binder.trim()) {
@@ -1201,6 +1428,118 @@ function Home() {
           )}
 
           {/* Show analysis status if deep analyzing */}
+          {/* ============================================
+              STEP 6: SKELETON REVIEW UI
+              Show Gemini's initial findings
+              ============================================ */}
+          {showSkeletonReview && binderSkeleton && !isDeepAnalyzing && (
+            <div style={{
+              marginBottom: '12px',
+              padding: '16px',
+              background: 'hsl(var(--card) / 0.9)',
+              borderRadius: '16px',
+              border: '2px solid hsl(var(--primary) / 0.3)',
+              maxHeight: '500px',
+              overflowY: 'auto',
+            }}>
+              <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '4px' }}>
+                🧠 Gemini's Analysis
+              </div>
+              <p style={{ fontSize: '11px', color: 'hsl(var(--muted-foreground))', marginBottom: '12px' }}>
+                Gemini skimmed your binder. Here's what it found and thinks might be missing.
+              </p>
+
+              {/* What Gemini found */}
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '6px', color: 'hsl(var(--primary))' }}>
+                  📋 What Gemini found:
+                </div>
+                {binderSkeleton.sections.slice(0, 4).map((section, index) => (
+                  <div key={section.id} style={{
+                    padding: '6px 10px',
+                    marginBottom: '4px',
+                    background: section.hasContent ? 'hsl(var(--primary) / 0.06)' : 'hsl(var(--destructive) / 0.06)',
+                    borderRadius: '6px',
+                    borderLeft: `3px solid ${section.hasContent ? 'hsl(var(--primary))' : 'hsl(var(--destructive))'}`,
+                  }}>
+                    <span style={{ fontSize: '11px' }}>
+                      {section.label || `Section ${String.fromCharCode(65 + index)}`}
+                      {section.subsections.some(s => !s.hasContent) && 
+                        <span style={{ fontSize: '9px', color: 'hsl(var(--destructive))', marginLeft: '6px' }}>
+                          (⚠️ missing some parts)
+                        </span>
+                      }
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* What Gemini thinks is missing */}
+              {binderSkeleton.missingTopics && binderSkeleton.missingTopics.length > 0 && (
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '6px', color: 'hsl(var(--destructive))' }}>
+                    🧠 Gemini thinks these might be missing:
+                  </div>
+                  {binderSkeleton.missingTopics.map((topic, index) => (
+                    <div key={index} style={{
+                      padding: '4px 10px',
+                      marginBottom: '4px',
+                      background: 'hsl(var(--destructive) / 0.06)',
+                      borderRadius: '6px',
+                      borderLeft: '3px solid hsl(var(--destructive))',
+                      fontSize: '11px',
+                    }}>
+                      {topic}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Gemini's recommendations */}
+              {binderSkeleton.recommendations && binderSkeleton.recommendations.length > 0 && (
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 500, marginBottom: '6px', color: 'hsl(var(--accent))' }}>
+                    💡 Gemini's recommendations:
+                  </div>
+                  {binderSkeleton.recommendations.map((rec, index) => (
+                    <div key={index} style={{
+                      padding: '4px 10px',
+                      marginBottom: '4px',
+                      background: 'hsl(var(--accent) / 0.06)',
+                      borderRadius: '6px',
+                      borderLeft: '3px solid hsl(var(--accent))',
+                      fontSize: '11px',
+                    }}>
+                      {rec}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button 
+                  className="primary-button" 
+                  style={{ padding: '6px 14px', fontSize: '11px', flex: 1 }}
+                  onClick={acceptSkeleton}
+                  disabled={isDeepAnalyzing}
+                >
+                  {isDeepAnalyzing ? '🔍 Analyzing...' : '✅ Accept & Deep Analyze'}
+                </button>
+                <button 
+                  className="outline-button" 
+                  style={{ padding: '6px 14px', fontSize: '11px' }}
+                  onClick={rejectSkeleton}
+                  disabled={isDeepAnalyzing}
+                >
+                  🔄 Try Again
+                </button>
+              </div>
+
+              <div style={{ marginTop: '10px', fontSize: '10px', color: 'hsl(var(--muted-foreground))' }}>
+                💡 Click "Accept" for a full detailed analysis of everything in your binder.
+              </div>
+            </div>
+          )}
           {isDeepAnalyzing && (
             <div style={{
               marginBottom: '12px',
@@ -1236,7 +1575,43 @@ function Home() {
               </p>
             </div>
           )}
-
+          {/* GAP ANALYSIS - Show what Gemini found missing */}
+          {tocAnalysis && gapAnalysis.length > 0 && (
+            <div style={{
+              marginTop: '12px',
+              padding: '12px 14px',
+              background: 'hsl(var(--destructive) / 0.04)',
+              borderRadius: '12px',
+              border: '1px solid hsl(var(--destructive) / 0.12)',
+              maxHeight: '200px',
+              overflowY: 'auto',
+            }}>
+              <div style={{ fontSize: '11px', fontWeight: 600, marginBottom: '6px' }}>
+                🧠 What Gemini thinks is missing
+              </div>
+              {gapAnalysis.filter(g => g.status !== 'complete').slice(0, 5).map((gap, index) => (
+                <div key={index} style={{
+                  padding: '4px 8px',
+                  marginBottom: '4px',
+                  background: 'hsl(var(--background) / 0.5)',
+                  borderRadius: '6px',
+                  borderLeft: `3px solid ${gap.priority === 'high' ? 'hsl(var(--destructive))' : 'hsl(var(--accent))'}`,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 500 }}>{gap.topic}</span>
+                    <span style={{ fontSize: '8px', padding: '1px 6px', borderRadius: '99px', 
+                      background: gap.status === 'partial' ? 'hsl(var(--accent) / 0.15)' : 'hsl(var(--destructive) / 0.15)',
+                      color: gap.status === 'partial' ? 'hsl(var(--accent))' : 'hsl(var(--destructive))' }}>
+                      {gap.status === 'partial' ? '🟡 Partial' : '🔴 Missing'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '9px', color: 'hsl(var(--muted-foreground))', marginTop: '2px' }}>
+                    💡 {gap.suggestion}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {/* TOC SIDEBAR - appears on the right */}
           {tocAnalysis && (
             <aside className="toc-sidebar-wrapper" style={{
