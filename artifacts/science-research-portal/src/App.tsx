@@ -93,83 +93,89 @@ function BinderSetup({ onComplete }: { onComplete: (binder: string, toc: TocAnal
     setMessage('🧠 Analyzing your binder structure...');
 
     try {
-      // ⚠️ IMPORTANT: This is where you'd call your Gemini API
-      // For now, we'll use a sample TOC to test the UI
-      // Later, replace this with a real API call
+      // ============================================
+      // CHUNKING: Split binder into pieces for Gemini
+      // ============================================
+      const MAX_CHUNK_SIZE = 8000;
+      const binderText = binder.trim();
 
-      // SAMPLE TOC DATA - DELETE THIS AND REPLACE WITH REAL API CALL
-      const sampleToc: TocAnalysis = {
-        nodes: [
+      // Split into chunks by sections (looking for patterns like "A.", "B.", etc.)
+      const chunkMatches = binderText.match(/([A-Z]\.\s+[^\n]+\n[\s\S]*?)(?=[A-Z]\.\s+|$)/g);
+
+      let chunks: string[] = [];
+      if (chunkMatches && chunkMatches.length > 1) {
+        chunks = chunkMatches;
+      } else {
+        for (let i = 0; i < binderText.length; i += MAX_CHUNK_SIZE) {
+          chunks.push(binderText.slice(i, i + MAX_CHUNK_SIZE));
+        }
+      }
+
+      setMessage(`📖 Analyzing ${chunks.length} sections of your binder...`);
+
+      // Process each chunk and combine results
+      let allNodes: TocNode[] = [];
+      let totalComplete = 0;
+      let totalPartial = 0;
+      let totalMissing = 0;
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        const chunkLabel = chunkMatches ? `Section ${i + 1}` : `Chunk ${i + 1}`;
+        setMessage(`🔍 Analyzing ${chunkLabel}... (${i + 1}/${chunks.length})`);
+
+        // Simulate API call for each chunk
+        // ⚠️ REPLACE THIS with actual Gemini API call for each chunk
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        // For demo, generate sample data for each chunk
+        const sampleNodes: TocNode[] = [
           {
-            id: 'A',
-            label: 'A. Earth Structure and Composition',
+            id: `chunk-${i}-A`,
+            label: `${String.fromCharCode(65 + i)}. Sample Section ${i + 1}`,
             level: 'section',
-            status: 'complete',
-            description: 'Earth\'s internal layers and properties',
-            suggestion: '',
+            status: ['complete', 'partial', 'missing'][i % 3] as 'complete' | 'partial' | 'missing',
+            description: `Content from ${chunkLabel}`,
+            suggestion: i % 2 === 0 ? '' : 'Consider adding more detail here',
             children: [
               {
-                id: 'A.1',
-                label: 'A.1. Interior Layers',
+                id: `chunk-${i}-A1`,
+                label: `${String.fromCharCode(65 + i)}.1. Subsection`,
                 level: 'subsection',
-                status: 'complete',
-                description: 'Crust, mantle, outer core, inner core',
+                status: ['complete', 'partial', 'missing'][(i + 1) % 3] as 'complete' | 'partial' | 'missing',
+                description: 'Example subsection',
                 suggestion: '',
-                children: [
-                  { id: 'A.1.1', label: 'A.1.1. Crust (continental vs oceanic)', level: 'subsubsection', status: 'complete', description: 'Differences between continental and oceanic crust', suggestion: '', children: [] },
-                  { id: 'A.1.2', label: 'A.1.2. Mantle (asthenosphere, lithosphere)', level: 'subsubsection', status: 'partial', description: 'Mantle layers and properties', suggestion: 'Add more detail about asthenosphere vs lithosphere', children: [] },
-                  { id: 'A.1.3', label: 'A.1.3. Core (outer vs inner)', level: 'subsubsection', status: 'missing', description: 'Earth\'s core composition and properties', suggestion: 'Add section on outer core (liquid) vs inner core (solid)', children: [] },
-                ]
-              },
-              { id: 'A.2', label: 'A.2. Isostasy', level: 'subsection', status: 'partial', description: 'Isostatic equilibrium and crustal buoyancy', suggestion: 'Add diagrams of isostatic balance', children: [] },
-              { id: 'A.3', label: 'A.3. Earth\'s Magnetic Field', level: 'subsection', status: 'missing', description: 'Geomagnetism and dynamo theory', suggestion: 'Add section on magnetic reversals and paleomagnetism', children: [] },
-            ]
-          },
-          {
-            id: 'B',
-            label: 'B. Plate Tectonics',
-            level: 'section',
-            status: 'complete',
-            description: 'Plate movement, boundaries, and driving forces',
-            suggestion: '',
-            children: [
-              {
-                id: 'B.1',
-                label: 'B.1. Types of Plate Boundaries',
-                level: 'subsection',
-                status: 'complete',
-                description: 'Divergent, convergent, and transform boundaries',
-                suggestion: '',
-                children: [
-                  { id: 'B.1.1', label: 'B.1.1. Divergent (mid-ocean ridges, rift valleys)', level: 'subsubsection', status: 'complete', description: 'Divergent boundary features', suggestion: '', children: [] },
-                  { id: 'B.1.2', label: 'B.1.2. Convergent (subduction, mountain building)', level: 'subsubsection', status: 'complete', description: 'Convergent boundary features', suggestion: '', children: [] },
-                  { id: 'B.1.3', label: 'B.1.3. Transform (faults, earthquakes)', level: 'subsubsection', status: 'partial', description: 'Transform boundary features', suggestion: 'Add more detail on strike-slip faults', children: [] },
-                ]
-              },
-              { id: 'B.2', label: 'B.2. Driving Mechanisms', level: 'subsection', status: 'missing', description: 'What drives plate movement', suggestion: 'Add section on convection currents, ridge push, slab pull', children: [] },
+                children: []
+              }
             ]
           }
-        ],
+        ];
+
+        allNodes = [...allNodes, ...sampleNodes];
+        totalComplete += sampleNodes.filter(n => n.status === 'complete').length;
+        totalPartial += sampleNodes.filter(n => n.status === 'partial').length;
+        totalMissing += sampleNodes.filter(n => n.status === 'missing').length;
+      }
+
+      // Build final TOC
+      const finalToc: TocAnalysis = {
+        nodes: allNodes,
         summary: {
-          total: 8,
-          complete: 4,
-          partial: 2,
-          missing: 2
+          total: allNodes.length,
+          complete: totalComplete,
+          partial: totalPartial,
+          missing: totalMissing
         }
       };
 
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      // Use the sample TOC for now
-      const tocData = sampleToc;
-
+      // Save everything
       window.localStorage.setItem(BINDER_KEY, binder.trim());
-      window.localStorage.setItem('TOC_ANALYSIS_KEY', JSON.stringify(tocData));
+      window.localStorage.setItem('TOC_ANALYSIS_KEY', JSON.stringify(finalToc));
 
       setMessage('✅ Binder analyzed successfully!');
       setIsAnalyzing(false);
-      onComplete(binder.trim(), tocData);
+      onComplete(binder.trim(), finalToc);
+
     } catch (error) {
       setMessage('⚠️ Analysis failed. You can continue without TOC analysis.');
       console.error('TOC analysis error:', error);
@@ -185,6 +191,31 @@ function BinderSetup({ onComplete }: { onComplete: (binder: string, toc: TocAnal
       <div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>Project Dynamic / Setup</div>
       <h1>Bring your binder<br /><em>to the table.</em></h1>
       <p className="setup-copy">Before the workspace opens, paste or describe your entire Dynamic Planet binder. Project Dynamic uses this as your map so its suggestions build on what you actually have.</p>
+
+      {/* ===== CREDITS ===== */}
+      <div style={{
+        marginTop: '20px',
+        padding: '16px 20px',
+        background: 'hsl(var(--primary) / 0.06)',
+        borderRadius: '16px',
+        border: '1px solid hsl(var(--primary) / 0.12)',
+        width: '100%',
+        maxWidth: '650px',
+        textAlign: 'center',
+      }}>
+        <p style={{ fontSize: '12px', color: 'hsl(var(--muted-foreground))', margin: 0, lineHeight: '1.6' }}>
+          Built with 💙 by{' '}
+          <strong style={{ color: 'hsl(var(--primary))' }}>DeepSeek</strong>
+          {' '}·{' '}
+          <strong style={{ color: 'hsl(var(--primary))' }}>Agent from Replit</strong>
+          {' '}· and{' '}
+          <strong style={{ color: 'hsl(var(--primary))' }}>you</strong> 🚀
+        </p>
+        <p style={{ fontSize: '10px', color: 'hsl(var(--muted-foreground) / 0.6)', margin: '4px 0 0' }}>
+          Special thanks to the Science Olympiad community
+        </p>
+      </div>
+
       <form className="setup-form" onSubmit={saveBinder}>
         <label className="question-label" htmlFor="binder-inventory">Your complete binder inventory</label>
         <textarea 
@@ -644,7 +675,199 @@ function Home() {
 
       {/* MAIN CONTENT - stays the same */}
       <main className="main-column">
-        {/* ... keep ALL the existing main content exactly as it is ... */}
+        <header className="topbar">
+          <div className="mobile-brand">
+            <div className="brand-mark" aria-hidden="true"><FlaskConical size={16} strokeWidth={1.7} /></div>
+            <span className="eyebrow">Science Olympiad / Fieldwork</span>
+          </div>
+          <div className="topbar-status ml-auto" data-testid="status-local-session">
+            <span className="status-dot" aria-hidden="true" /> Session saved locally
+          </div>
+        </header>
+
+        <div className="main-content">
+          <section className="intro" data-testid="section-introduction">
+            <div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>Project Dynamic / Division B</div>
+            <h1>Build a binder<br />with <em>solid ground.</em></h1>
+            <p>Your personal Dynamic Planet field notebook. Track sections, log what you finished, and ask for the next useful branch to add.</p>
+            <button className="insight-button" onClick={askForInsights} data-testid="button-binder-insights"><WandSparkles size={15} /> Ask what to add next</button>
+          </section>
+
+          <div className="work-grid">
+            <div>
+              <section className="question-card" id="question-desk" data-testid="card-question-desk">
+                <div className="card-heading">
+                  <div>
+                    <div className="step-number">01 / RESEARCH</div>
+                    <h2>What are you trying to understand?</h2>
+                    <p>Ask about a Dynamic Planet concept, event, diagram, or data set.</p>
+                  </div>
+                  <BookOpen size={20} strokeWidth={1.5} style={{ color: 'hsl(var(--muted-foreground))' }} />
+                </div>
+
+                <form onSubmit={submitQuestion} data-testid="form-research-question">
+                  <label className="question-label" htmlFor="question-field">Research question</label>
+                  <textarea
+                    id="question-field"
+                    className="question-input"
+                    value={question}
+                    onChange={(event) => setQuestion(event.target.value)}
+                    placeholder="e.g. Why do desert plants open their stomata at night?"
+                    maxLength={4000}
+                    data-testid="input-research-question"
+                  />
+                  <div className="field-row">
+                    <div>
+                      <label className="question-label" htmlFor="subject-field">Subject <span style={{ opacity: .65 }}>(optional)</span></label>
+                      <select id="subject-field" className="field-control" value={subject} onChange={(event) => setSubject(event.target.value)} data-testid="select-research-subject">
+                        <option value="">Choose a subject</option>
+                        <option value="Dynamic Planet — Division B">Dynamic Planet — Division B</option>
+                        <option value="Anatomy and Physiology">Anatomy and Physiology</option>
+                        <option value="Biology">Biology</option>
+                        <option value="Chemistry">Chemistry</option>
+                        <option value="Earth and Space Science">Earth and Space Science</option>
+                        <option value="Environmental Science">Environmental Science</option>
+                        <option value="Physics">Physics</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="question-label" htmlFor="context-field">What do you already know? <span style={{ opacity: .65 }}>(optional)</span></label>
+                      <textarea id="context-field" className="field-control context-input" value={context} onChange={(event) => setContext(event.target.value)} maxLength={2000} placeholder="Class notes, constraints, or terms to define..." data-testid="input-research-context" />
+                    </div>
+                  </div>
+                  {validationMessage && <div className="mt-3 text-xs" style={{ color: 'hsl(var(--destructive))' }} data-testid="status-validation">{validationMessage}</div>}
+                  <div className="form-footer">
+                    <div className="helper-text">For school-approved Science Olympiad research. Verify every answer against primary sources.</div>
+                    <button className="primary-button" type="submit" disabled={askResearch.isPending} data-testid="button-submit-research">
+                      {askResearch.isPending ? <><RotateCcw size={14} className="animate-spin" /> Thinking through it...</> : <><Send size={14} /> Start research</>}
+                    </button>
+                  </div>
+                </form>
+
+                <div className="sample-area">
+                  <div className="sample-label">Need a first thread?</div>
+                  <div className="sample-list">
+                    {samples.map((sample, index) => (
+                      <button className="sample-button" key={sample} onClick={() => chooseSample(sample)} data-testid={`button-sample-question-${index}`}>{sample}</button>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              {askResearch.isPending && (
+                <section className="response-card" aria-label="Research response loading" data-testid="status-research-loading">
+                  <div className="skeleton h-4 w-36" />
+                  <div className="mt-7 grid gap-3"><div className="skeleton h-4 w-full" /><div className="skeleton h-4 w-[92%]" /><div className="skeleton h-4 w-[76%]" /></div>
+                  <div className="mt-5 grid gap-3"><div className="skeleton h-4 w-[88%]" /><div className="skeleton h-4 w-[66%]" /></div>
+                </section>
+              )}
+
+              {errorMessage && !askResearch.isPending && (
+                <div className="error-box" data-testid="status-research-error">
+                  <span className="flex items-center gap-2"><AlertCircle size={16} /> {errorMessage}</span>
+                  <button className="outline-button" onClick={(event) => { event.preventDefault(); setErrorMessage(''); submitQuestion(event as unknown as FormEvent<HTMLFormElement>); }} data-testid="button-retry-research">Retry</button>
+                </div>
+              )}
+
+              {answer && !askResearch.isPending && (
+                <section className="response-card" data-testid="card-research-response">
+                  <div className="response-meta">
+                    <div className="response-title"><Sparkles size={17} /><h2>Research brief</h2></div>
+                    <div className="model-label" data-testid="text-research-model">via {answer.model}</div>
+                  </div>
+                  <div className="answer-body" data-testid="text-research-answer">
+                    {renderAnswer(answer.answer)}
+                  </div>
+                  <div className="notice">
+                    <Info size={15} />
+                    <span>This is a research starting point, not a source. Confirm claims, numbers, and definitions in the original publication or agency page before using them in your work.</span>
+                  </div>
+                  <div className="response-footer">
+                    <span className="eyebrow self-center" style={{ color: 'hsl(var(--muted-foreground))' }}>Keep what is useful</span>
+                    <div className="response-actions">
+                      <button className="outline-button" onClick={copyAnswer} data-testid="button-copy-answer"><Clipboard size={14} /> Copy brief</button>
+                      <button className="primary-button" onClick={saveAnswer} data-testid="button-save-note"><NotebookPen size={14} /> Save as note</button>
+                    </div>
+                  </div>
+                </section>
+              )}
+            </div>
+
+            <aside className="session-stack" aria-label="Research session">
+              <section className="session-card binder-card" id="binder-plan" data-testid="card-binder-plan">
+                <div className="session-header">
+                  <div><div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>02 / PLAN</div><h3>Binder plan</h3><p>{todos.filter((todo) => todo.done).length} of {todos.length} sections checked off.</p></div>
+                  <span className="session-count" data-testid="text-todo-count">{todos.filter((todo) => todo.done).length}</span>
+                </div>
+                <div className="todo-list">
+                  {todos.map((todo) => <button className={`todo-item ${todo.done ? 'done' : ''}`} key={todo.id} onClick={() => toggleTodo(todo.id)} data-testid={`button-todo-${todo.id}`}><CheckCircle2 size={16} /><span>{todo.label}</span></button>)}
+                </div>
+                <form className="add-todo-form" onSubmit={addTodo}>
+                  <input value={newTodo} onChange={(event) => setNewTodo(event.target.value)} placeholder="Add a section branch..." aria-label="New binder section" data-testid="input-new-todo" />
+                  <button className="icon-button" type="submit" aria-label="Add binder section" data-testid="button-add-todo"><Plus size={15} /></button>
+                </form>
+              </section>
+
+              <section className="session-card updates-card" id="binder-updates" data-testid="card-binder-updates">
+                <div className="session-header">
+                  <div><div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>03 / LOG</div><h3>My updates</h3><p>Tell the AI what made it into your binder.</p></div>
+                  <span className="session-count" data-testid="text-update-count">{updates.length}</span>
+                </div>
+                <form className="update-form" onSubmit={addUpdate}>
+                  <input value={updateSection} onChange={(event) => setUpdateSection(event.target.value)} placeholder="Section name" aria-label="Updated section name" data-testid="input-update-section" />
+                  <textarea value={updateText} onChange={(event) => setUpdateText(event.target.value)} placeholder="What did you add or learn?" aria-label="Binder update" data-testid="input-update-text" />
+                  <button className="primary-button" type="submit" disabled={updateBinderPlan.isPending} data-testid="button-save-update"><Plus size={14} /> {updateBinderPlan.isPending ? 'Updating plan...' : 'Log + update plan'}</button>
+                </form>
+                {insightFocus && <div className="insight-box"><WandSparkles size={14} /><span><strong>AI focus:</strong> {insightFocus}</span></div>}
+                {updates.length > 0 && <div className="update-list">{updates.slice(0, 4).map((item) => <article className="update-item" key={item.id}><div><strong>{item.section}</strong><p>{item.update}</p></div><button className="icon-button" onClick={() => setUpdates((current) => current.filter((update) => update.id !== item.id))} aria-label="Delete binder update"><Trash2 size={13} /></button></article>)}</div>}
+              </section>
+
+              <section className="session-card" id="source-shelf" data-testid="card-source-shelf">
+                <div className="session-header">
+                  <div><div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>04 / TRACE</div><h3>Source shelf</h3><p>Keep the links you plan to check.</p></div>
+                  <span className="session-count" data-testid="text-source-count">{sources.length}</span>
+                </div>
+                <form className="source-form" onSubmit={addSource} data-testid="form-add-source">
+                  <input value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="Add a source URL" aria-label="Source URL" data-testid="input-source-url" />
+                  <button className="primary-button !p-2.5" type="submit" aria-label="Save source URL" data-testid="button-add-source"><Plus size={15} /></button>
+                </form>
+                {sources.length === 0 ? <div className="empty-mini"><Link2 size={17} className="mx-auto mb-2 opacity-50" />No links yet. Add the original paper, dataset, or agency page you find.</div> : (
+                  <div className="source-list">
+                    {sources.map((source) => (
+                      <div className="source-item" key={source.id} data-testid={`item-source-${source.id}`}>
+                        <a href={source.url} target="_blank" rel="noreferrer" data-testid={`link-source-${source.id}`}>{source.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}<ExternalLink size={11} className="ml-1 inline" /></a>
+                        <button className="icon-button" onClick={() => setSources((current) => current.filter((item) => item.id !== source.id))} aria-label="Remove source" data-testid={`button-remove-source-${source.id}`}><Trash2 size={13} /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="session-card" id="saved-notes" data-testid="card-saved-notes">
+                <div className="session-header">
+                  <div><div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>05 / KEEP</div><h3>Saved notes</h3><p>Only this browser can see this session.</p></div>
+                  <span className="session-count" data-testid="text-note-count">{notes.length}</span>
+                </div>
+                {notes.length === 0 ? <div className="empty-mini"><NotebookPen size={17} className="mx-auto mb-2 opacity-50" />Your useful answers will live here.</div> : (
+                  <div className="note-list">
+                    {notes.map((note) => (
+                      <article className="note-item" key={note.id} data-testid={`item-note-${note.id}`}>
+                        <time>{new Date(note.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} / {note.subject}</time>
+                        <p>{note.question}</p>
+                        <button className="icon-button ml-auto" onClick={() => setNotes((current) => current.filter((item) => item.id !== note.id))} aria-label="Delete saved note" data-testid={`button-delete-note-${note.id}`}><Trash2 size={13} /></button>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </aside>
+          </div>
+
+          <footer className="mt-12 flex flex-wrap items-center justify-between gap-3 border-t pt-5" style={{ borderColor: 'hsl(var(--border))' }}>
+            <span className="eyebrow" style={{ color: 'hsl(var(--muted-foreground))' }}>Fieldwork protocol / verify before you cite</span>
+            <span className="text-[11px]" style={{ color: 'hsl(var(--muted-foreground))' }}>Built for curious teams, one question at a time.</span>
+          </footer>
+        </div>
       </main>
 
       {/* NEW: TOC SIDEBAR - appears on the right */}
