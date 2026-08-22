@@ -61,6 +61,13 @@ type SkeletonLine = {
   body: string;
 };
 
+// Sent to Gemini once a real structure/analysis endpoint exists — plug this into
+// that prompt's system/instruction text. The local parser below already enforces
+// the same rule so table-of-contents lines don't pollute the skeleton today.
+const GEMINI_FORMAT_INSTRUCTIONS = `Contents will be in the form of LETTER, LETTER.NUMBER, or LETTER.NUMBER.NUMBER, UNLESS it is in a table of contents, which will ALWAYS be in the form of LETTER0 (e.g. A0, B0). Never treat a LETTER0 line as a real section — it only marks a table-of-contents entry and should be ignored when building the outline.`;
+
+const TOC_MARKER_PATTERN = /^[A-Za-z]+0$/;
+
 function skeletonDepth(code: string): number {
   const digits = code.replace(/^[A-Za-z]+/, '');
   if (!digits) return 1;
@@ -77,6 +84,10 @@ function parseSkeletonLines(rawText: string): SkeletonLine[] {
     const line = rawLine.trim();
     if (!line) continue;
     const match = line.match(headingPattern);
+    if (match && TOC_MARKER_PATTERN.test(match[1])) {
+      // Table-of-contents line (e.g. "A0 Rocks") — never a real section, skip entirely.
+      continue;
+    }
     if (match) {
       if (current) entries.push(current);
       current = { code: match[1], title: match[2].trim(), depth: skeletonDepth(match[1]), body: '' };
