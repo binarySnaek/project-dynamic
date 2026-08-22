@@ -527,7 +527,9 @@ function Home() {
   const [analysisMessage, setAnalysisMessage] = useState('');
   const [gapAnalysis, setGapAnalysis] = useState<GapAnalysis[]>([]);
   const [skeletonLines, setSkeletonLines] = useState<SkeletonLine[]>([]);
-  const [stage, setStage] = useState<'review' | 'analyzing' | 'ready'>('ready');
+  const [stage, setStage] = useState<'review' | 'analyzing' | 'ready'>(() =>
+    readStorage<'review' | 'analyzing' | 'ready'>('project-dynamic-stage', 'ready'),
+  );
   const [editingBinder, setEditingBinder] = useState(false);
 
   useEffect(() => {
@@ -543,6 +545,10 @@ function Home() {
   useEffect(() => {
     window.localStorage.setItem(UPDATES_KEY, JSON.stringify(updates));
   }, [updates]);
+
+  useEffect(() => {
+    window.localStorage.setItem('project-dynamic-stage', JSON.stringify(stage));
+  }, [stage]);
 
   useEffect(() => {
     if (!feedback) return;
