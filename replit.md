@@ -1,6 +1,6 @@
-# [Project name]
+# Science Research Portal
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A focused Science Olympiad research workspace that pairs Gemini-assisted exploration with local notes and source tracking.
 
 ## Run & Operate
 
@@ -22,15 +22,22 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/science-research-portal` — responsive research workspace UI
+- `artifacts/api-server/src/routes/gemini.ts` — server-side Gemini research endpoint
+- `lib/api-spec/openapi.yaml` — source of truth for the research API contract
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Gemini requests stay server-side so the API key is never exposed to the browser.
+- Notes and source links are intentionally browser-local for a lightweight school research session.
+- The prompt emphasizes primary-source verification and avoids invented citations.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Ask focused research questions with optional subject and context.
+- Review, copy, and save AI responses as notes.
+- Keep a source shelf of URLs to verify.
+- Clear a local session when starting a new topic.
 
 ## User preferences
 
@@ -38,7 +45,8 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- The API expects `GEMINI_API_KEY` in Replit Secrets.
+- The Gemini provider may retire model identifiers; keep the model name aligned with the provider's current response.
 
 ## Pointers
 

@@ -1,0 +1,1 @@
+- [Gemini provider model availability](gemini-provider-models.md) — model-specific 404s may indicate retirement for newly provisioned keys; inspect the provider response.
