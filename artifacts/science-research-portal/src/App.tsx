@@ -221,11 +221,9 @@ function renderAnswer(text: string) {
           {' '}·{' '}
           <strong style={{ color: 'hsl(var(--primary))' }}>Agent from Replit</strong>
           {' '}· and{' '}
-          <strong style={{ color: 'hsl(var(--primary))' }}>you</strong> 🚀
+          <strong style={{ color: 'hsl(var(--primary))' }}>Claude</strong> 🚀
         </p>
-        <p style={{ fontSize: '10px', color: 'hsl(var(--muted-foreground) / 0.6)', margin: '4px 0 0' }}>
-          Special thanks to the Science Olympiad community
-        </p>
+        
       </div>
 
       <form className="setup-form" onSubmit={saveBinder}>
