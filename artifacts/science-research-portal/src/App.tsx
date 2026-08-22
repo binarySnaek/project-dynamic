@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AlertCircle, BookOpen, Check, CheckCircle2, Clipboard, ExternalLink, FlaskConical, Info, Link2, ListChecks, NotebookPen, Plus, RotateCcw, Send, Sparkles, Trash2, WandSparkles } from 'lucide-react';
-import { useAskGeminiResearch, useUpdateGeminiBinderPlan } from '@workspace/api-client-react';
+import { useAnalyzeBinderStructure, useAskGeminiResearch, useUpdateGeminiBinderPlan } from '@workspace/api-client-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
@@ -64,7 +64,24 @@ type SkeletonLine = {
 // Sent to Gemini once a real structure/analysis endpoint exists — plug this into
 // that prompt's system/instruction text. The local parser below already enforces
 // the same rule so table-of-contents lines don't pollute the skeleton today.
-const GEMINI_FORMAT_INSTRUCTIONS = `Contents will be in the form of LETTER, LETTER.NUMBER, or LETTER.NUMBER.NUMBER, UNLESS it is in a table of contents, which will ALWAYS be in the form of LETTER0 (e.g. A0, B0). Never treat a LETTER0 line as a real section — it only marks a table-of-contents entry and should be ignored when building the outline.`;
+// This is the prompt text for the backend's binder-structure endpoint (paste it
+// into that endpoint's system/instruction text — it does not get sent from the
+// client on every call).
+const GEMINI_STRUCTURE_INSTRUCTIONS = `You are parsing a student's competition binder ("Dynamic Planet") into a structured outline.
+
+SECTION CODES: A real section heading is a single letter, optionally followed by digits separated by dots, indicating nesting depth:
+  - "A" or "A." — a top-level section (depth 1)
+  - "A1" or "A1." — a subsection (depth 2)
+  - "A1.1" or "A1.1." — a sub-subsection (depth 3)
+  - deeper nesting follows the same pattern (A1.1.1, etc.)
+A bare letter with no digits (like "A") is only a heading if followed by a period. Do not treat an ordinary sentence, list item, or paragraph that happens to start with a capital letter as a heading.
+
+TABLE OF CONTENTS: Lines shaped like LETTER0 (A0, B0, C0, ...) are table-of-contents markers, NEVER real sections. Skip them entirely.
+
+For each real section heading you find, capture: the code (e.g. "A1.1"), the title text on that heading line, the nesting depth, and all body text that follows it up until the next heading.
+
+Return ONLY a JSON array (no prose, no markdown fences) shaped like:
+[{ "code": string, "title": string, "depth": number, "body": string }, ...]`;
 
 //const TOC_MARKER_PATTERN = /^[A-Za-z]+0$/;
 
@@ -194,10 +211,9 @@ function renderAnswer(text: string) {
   });
 }
 
-  function BinderSetup({ onComplete, initialValue = '' }: { onComplete: (binder: string) => void; initialValue?: string }) {
-    const [binder, setBinder] = useState(initialValue);
-    const [message, setMessage] = useState('');
-    const isAnalyzing = false;
+    function BinderSetup({ onComplete, initialValue = '', isAnalyzing = false, errorMessage = '' }: { onComplete: (binder: string) => void; initialValue?: string; isAnalyzing?: boolean; errorMessage?: string }) {
+      const [binder, setBinder] = useState(initialValue);
+      const [message, setMessage] = useState('');
 
   const saveBinder = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -248,6 +264,7 @@ function renderAnswer(text: string) {
           disabled={isAnalyzing}
         />
         {message && <div className="setup-message" role="alert" data-testid="status-binder-setup">{message}</div>}
+        {errorMessage && <div className="setup-message" role="alert" data-testid="status-binder-skim-error">{errorMessage}</div>}
         <button className="primary-button" type="submit" disabled={isAnalyzing} data-testid="button-open-project-dynamic">
           {isAnalyzing ? '🔍 Analyzing...' : <><BookOpen size={15} /> Open Project Dynamic</>}
         </button>
@@ -500,6 +517,8 @@ function Home() {
   const [insightFocus, setInsightFocus] = useState('');
   const askResearch = useAskGeminiResearch();
   const updateBinderPlan = useUpdateGeminiBinderPlan();
+  const analyzeBinderStructure = useAnalyzeBinderStructure();
+  const [skimError, setSkimError] = useState('');
   const [tocAnalysis, setTocAnalysis] = useState<TocAnalysis | null>(() => 
     readStorage<TocAnalysis | null>('TOC_ANALYSIS_KEY', null)
   );
@@ -686,8 +705,20 @@ function Home() {
   // GEMINI SKIM - Creates binder skeleton
   // ============================================
   const skimBinder = (binderContent: string) => {
-    setSkeletonLines(parseSkeletonLines(binderContent));
-    setStage('review');
+    setSkimError('');
+    analyzeBinderStructure.mutate(
+      { data: { binder: binderContent } },
+      {
+        onSuccess: (result) => {
+          setSkeletonLines(result.sections);
+          setStage('review');
+        },
+        onError: (error) => {
+          const apiError = error as { error?: string; message?: string };
+          setSkimError(apiError.error || apiError.message || 'Gemini could not read your binder structure. Try again, or edit the binder text.');
+        },
+      },
+    );
   };
 
   const analyzeBinder = () => {
@@ -733,7 +764,14 @@ function Home() {
   };
 
   if (!binder.trim() || editingBinder) {
-    return <BinderSetup onComplete={handleBinderComplete} initialValue={binder} />;
+    return (
+      <BinderSetup
+        onComplete={handleBinderComplete}
+        initialValue={binder}
+        isAnalyzing={analyzeBinderStructure.isPending}
+        errorMessage={skimError}
+      />
+    );
   }
 
   if (stage === 'review') {
