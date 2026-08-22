@@ -1095,3 +1095,66 @@
                                                                                       .response-actions { width: 100%; }
                                                                                       .response-actions .outline-button { flex: 1; justify-content: center; }
                                                                                     }
+                                                                                      /* ============================================
+                                                                                         TOC SIDEBAR STYLES
+                                                                                         ============================================ */
+                                                                                      .toc-sidebar-wrapper {
+                                                                                        scrollbar-width: thin;
+                                                                                      }
+
+                                                                                      .toc-sidebar-wrapper::-webkit-scrollbar {
+                                                                                        width: 4px;
+                                                                                      }
+
+                                                                                      .toc-sidebar-wrapper::-webkit-scrollbar-track {
+                                                                                        background: transparent;
+                                                                                      }
+
+                                                                                      .toc-sidebar-wrapper::-webkit-scrollbar-thumb {
+                                                                                        background: hsl(var(--primary) / 0.3);
+                                                                                        border-radius: 99px;
+                                                                                      }
+
+                                                                                      .toc-leaf {
+                                                                                        transition: background 0.2s ease;
+                                                                                      }
+
+                                                                                      .toc-leaf:hover {
+                                                                                        background: rgba(59, 130, 246, 0.06);
+                                                                                      }
+
+                                                                                      .toc-parent {
+                                                                                        transition: background 0.2s ease;
+                                                                                      }
+
+                                                                                      .toc-parent:hover {
+                                                                                        background: rgba(59, 130, 246, 0.04);
+                                                                                      }
+
+                                                                                      .toc-tooltip {
+                                                                                        animation: rise-in 0.2s ease both;
+                                                                                      }
+
+                                                                                      @keyframes pulse-emoji {
+                                                                                        0%, 100% { transform: scale(1); }
+                                                                                        50% { transform: scale(1.2); }
+                                                                                      }
+
+                                                                                      .dark .toc-leaf {
+                                                                                        border-left-color: hsl(var(--primary) / 0.5);
+                                                                                      }
+
+                                                                                      .dark .toc-tooltip {
+                                                                                        background: hsl(210 40% 13%);
+                                                                                        border-color: hsl(210 30% 25%);
+                                                                                      }
+
+                                                                                      /* Mobile responsiveness */
+                                                                                      @media (max-width: 1200px) {
+                                                                                        .workspace-shell {
+                                                                                          grid-template-columns: 1fr !important;
+                                                                                        }
+                                                                                        .toc-sidebar-wrapper {
+                                                                                          display: none;
+                                                                                        }
+                                                                                      }
