@@ -148,17 +148,17 @@ function BinderSetup({ onComplete }: { onComplete: (binder: string, toc: TocAnal
 
         await new Promise(resolve => setTimeout(resolve, 800));
 
-        const geminiNodes: TocNode[] = [
-          {
-            id: `section-${i}`,
-            label: `Section ${String.fromCharCode(65 + i)}`,
-            level: 'section',
-            status: 'complete',
-            description: `Analyzed by Gemini`,
-            suggestion: '',
-            children: []
-          }
-        ];
+        // const geminiNodes: TocNode[] = [
+        //   {
+        //     id: `section-${i}`,
+        //     label: `Section ${String.fromCharCode(65 + i)}`,
+        //     level: 'section',
+        //     status: 'complete',
+        //     description: `Analyzed by Gemini`,
+        //     suggestion: '',
+        //     children: []
+        //   }
+        // ];
 
         allNodes = [...allNodes, ...geminiNodes];
         totalComplete += geminiNodes.filter(n => n.status === 'complete').length;
@@ -166,22 +166,24 @@ function BinderSetup({ onComplete }: { onComplete: (binder: string, toc: TocAnal
         totalMissing += geminiNodes.filter(n => n.status === 'missing').length;
       }
 
-      const finalToc: TocAnalysis = {
-        nodes: allNodes,
-        summary: {
-          total: allNodes.length,
-          complete: totalComplete,
-          partial: totalPartial,
-          missing: totalMissing
-        }
-      };
+      // const finalToc: TocAnalysis = {
+      //   nodes: allNodes,
+      //   summary: {
+      //     total: allNodes.length,
+      //     complete: totalComplete,
+      //     partial: totalPartial,
+      //     missing: totalMissing
+      //   }
+      // };
 
+      // Save the binder but DON'T create a TOC yet
+      // The skim process will handle this
       window.localStorage.setItem(BINDER_KEY, binder.trim());
-      window.localStorage.setItem('TOC_ANALYSIS_KEY', JSON.stringify(finalToc));
 
-      setMessage('✅ Binder analyzed successfully!');
+      setMessage('📋 Binder saved! Now skimming...');
       setIsAnalyzing(false);
-      onComplete(binder.trim(), finalToc);
+      // Pass null for TOC so the skim process starts
+      onComplete(binder.trim(), null);
 
     } catch (error) {
       setMessage('⚠️ Analysis failed. Please try again.');
