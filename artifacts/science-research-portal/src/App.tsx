@@ -82,12 +82,6 @@ type Todo = { id: string; label: string; done: boolean };
 type BinderUpdate = { id: string; section: string; update: string; createdAt: string };
 
 const starterTodos: Todo[] = [
-  { id: 'earth-structure', label: 'Earth structure and composition', done: false },
-  { id: 'plate-tectonics', label: 'Plate tectonics and boundaries', done: false },
-  { id: 'minerals-rocks', label: 'Minerals, rocks, and the rock cycle', done: false },
-  { id: 'surface-processes', label: 'Surface processes and landforms', done: false },
-  { id: 'hazards', label: 'Geologic hazards and preparedness', done: false },
-  { id: 'maps', label: 'Maps, models, and data interpretation', done: false },
 ];
 
 const samples = [
@@ -247,9 +241,6 @@ function BinderSetup({ onComplete }: { onComplete: (binder: string, toc: TocAnal
           <strong style={{ color: 'hsl(var(--primary))' }}>Agent from Replit</strong>
           {' '}· and{' '}
           <strong style={{ color: 'hsl(var(--primary))' }}>you</strong> 🚀
-        </p>
-        <p style={{ fontSize: '10px', color: 'hsl(var(--muted-foreground) / 0.6)', margin: '4px 0 0' }}>
-          Special thanks to the Science Olympiad community
         </p>
       </div>
 
