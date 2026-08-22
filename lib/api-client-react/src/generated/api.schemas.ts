@@ -50,4 +50,20 @@ export interface BinderInsightResponse {
   add: string[];
   focus: string;
 }
+export interface BinderStructureInput {
+  /**
+     * @minLength 20
+     * @maxLength 12000
+     */
+  binder: string;
+}
+export interface BinderSection {
+  code: string;
+  title: string;
+  depth: number;
+  body: string;
+}
+export interface BinderStructureResponse {
+  sections: BinderSection[];
+}
 

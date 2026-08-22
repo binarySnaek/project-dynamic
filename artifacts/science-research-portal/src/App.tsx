@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AlertCircle, BookOpen, Check, CheckCircle2, Clipboard, ExternalLink, FlaskConical, Info, Link2, ListChecks, NotebookPen, Plus, RotateCcw, Send, Sparkles, Trash2, WandSparkles } from 'lucide-react';
-import { useAskGeminiResearch, useUpdateGeminiBinderPlan } from '@workspace/api-client-react';
+import { useAnalyzeBinderStructure, useAskGeminiResearch, useUpdateGeminiBinderPlan } from '@workspace/api-client-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 

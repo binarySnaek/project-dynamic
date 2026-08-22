@@ -23,6 +23,8 @@ import type {
   ApiError,
   BinderInsightInput,
   BinderInsightResponse,
+  BinderStructureInput,
+  BinderStructureResponse,
   HealthStatus,
   ResearchQuestionInput,
   ResearchResponse
@@ -265,13 +267,83 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Turn binder progress into checklist updates
  */
 export const useUpdateGeminiBinderPlan = <TError = ErrorType<ApiError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateGeminiBinderPlan>>, TError,{data: BodyType<BinderInsightInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof updateGeminiBinderPlan>>,
-        TError,
-        {data: BodyType<BinderInsightInput>},
-        TContext
-      > => {
-      return useMutation(getUpdateGeminiBinderPlanMutationOptions(options));
-    }
+  TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateGeminiBinderPlan>>, TError,{data: BodyType<BinderInsightInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationResult<
+      Awaited<ReturnType<typeof updateGeminiBinderPlan>>,
+      TError,
+      {data: BodyType<BinderInsightInput>},
+      TContext
+    > => {
+    return useMutation(getUpdateGeminiBinderPlanMutationOptions(options));
+  }
 
+export const getAnalyzeBinderStructureUrl = () => {
+
+
+
+
+  return `/api/gemini/binder-structure`
+}
+
+/**
+* @summary Parse a binder into its section structure
+*/
+export const analyzeBinderStructure = async (binderStructureInput: BinderStructureInput, options?: Parameters<typeof customFetch>[1]): Promise<BinderStructureResponse> => {
+
+return customFetch<BinderStructureResponse>(getAnalyzeBinderStructureUrl(),
+{
+  ...options,
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', ...options?.headers },
+  body: JSON.stringify(binderStructureInput)
+}
+);}
+
+
+
+
+
+export const getAnalyzeBinderStructureMutationOptions = <TError = ErrorType<ApiError>,
+  TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof analyzeBinderStructure>>, TError,{data: BodyType<BinderStructureInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof analyzeBinderStructure>>, TError,{data: BodyType<BinderStructureInput>}, TContext> => {
+
+const mutationKey = ['analyzeBinderStructure'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+    options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+    options
+    : {...options, mutation: {...options.mutation, mutationKey}}
+    : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+    const mutationFn: MutationFunction<Awaited<ReturnType<typeof analyzeBinderStructure>>, {data: BodyType<BinderStructureInput>}> = (props) => {
+        const {data} = props ?? {};
+
+        return  analyzeBinderStructure(data,requestOptions)
+      }
+
+
+
+
+
+
+return  { mutationFn, ...mutationOptions }}
+
+  export type AnalyzeBinderStructureMutationResult = NonNullable<Awaited<ReturnType<typeof analyzeBinderStructure>>>
+  export type AnalyzeBinderStructureMutationBody = BodyType<BinderStructureInput>
+  export type AnalyzeBinderStructureMutationError = ErrorType<ApiError>
+
+  /**
+* @summary Parse a binder into its section structure
+*/
+export const useAnalyzeBinderStructure = <TError = ErrorType<ApiError>,
+  TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof analyzeBinderStructure>>, TError,{data: BodyType<BinderStructureInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationResult<
+      Awaited<ReturnType<typeof analyzeBinderStructure>>,
+      TError,
+      {data: BodyType<BinderStructureInput>},
+      TContext
+    > => {
+    return useMutation(getAnalyzeBinderStructureMutationOptions(options));
+  }

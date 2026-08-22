@@ -12,3 +12,6 @@ export * from './binderInsightResponse';
 export * from './healthStatus';
 export * from './researchQuestionInput';
 export * from './researchResponse';
+export * from './binderSection';
+export * from './binderStructureInput';
+export * from './binderStructureResponse';

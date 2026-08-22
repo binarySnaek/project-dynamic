@@ -86,6 +86,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /gemini/binder-structure:
+    post:
+      operationId: analyzeBinderStructure
+      tags: [gemini]
+      summary: Parse a binder into its section structure
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BinderStructureInput"
+      responses:
+        "200":
+          description: Parsed binder structure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BinderStructureResponse"
+        "400":
+          description: Invalid binder text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: AI provider error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -168,4 +198,38 @@ components:
         - completed
         - add
         - focus
-
+    BinderStructureInput:
+      type: object
+      properties:
+        binder:
+          type: string
+          minLength: 20
+          maxLength: 12000
+      required:
+        - binder
+    BinderStructureResponse:
+      type: object
+      properties:
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/BinderSection"
+      required:
+        - sections
+    BinderSection:
+      type: object
+      properties:
+        code:
+          type: string
+        title:
+          type: string
+        depth:
+          type: integer
+          minimum: 1
+        body:
+          type: string
+      required:
+        - code
+        - title
+        - depth
+        - body
