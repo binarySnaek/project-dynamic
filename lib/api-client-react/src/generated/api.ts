@@ -21,6 +21,8 @@ import type {
 
 import type {
   ApiError,
+  BinderInsightInput,
+  BinderInsightResponse,
   HealthStatus,
   ResearchQuestionInput,
   ResearchResponse
@@ -200,5 +202,76 @@ export const useAskGeminiResearch = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getAskGeminiResearchMutationOptions(options));
+    }
+
+export const getUpdateGeminiBinderPlanUrl = () => {
+
+
+
+
+  return `/api/gemini/binder-insights`
+}
+
+/**
+ * @summary Turn binder progress into checklist updates
+ */
+export const updateGeminiBinderPlan = async (binderInsightInput: BinderInsightInput, options?: Parameters<typeof customFetch>[1]): Promise<BinderInsightResponse> => {
+
+  return customFetch<BinderInsightResponse>(getUpdateGeminiBinderPlanUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(binderInsightInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateGeminiBinderPlanMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateGeminiBinderPlan>>, TError,{data: BodyType<BinderInsightInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateGeminiBinderPlan>>, TError,{data: BodyType<BinderInsightInput>}, TContext> => {
+
+const mutationKey = ['updateGeminiBinderPlan'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateGeminiBinderPlan>>, {data: BodyType<BinderInsightInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateGeminiBinderPlan(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateGeminiBinderPlanMutationResult = NonNullable<Awaited<ReturnType<typeof updateGeminiBinderPlan>>>
+    export type UpdateGeminiBinderPlanMutationBody = BodyType<BinderInsightInput>
+    export type UpdateGeminiBinderPlanMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Turn binder progress into checklist updates
+ */
+export const useUpdateGeminiBinderPlan = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateGeminiBinderPlan>>, TError,{data: BodyType<BinderInsightInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateGeminiBinderPlan>>,
+        TError,
+        {data: BodyType<BinderInsightInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateGeminiBinderPlanMutationOptions(options));
     }
 

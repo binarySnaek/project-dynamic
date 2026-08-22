@@ -56,6 +56,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /gemini/binder-insights:
+    post:
+      operationId: updateGeminiBinderPlan
+      tags: [gemini]
+      summary: Turn binder progress into checklist updates
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BinderInsightInput"
+      responses:
+        "200":
+          description: Suggested binder plan updates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BinderInsightResponse"
+        "400":
+          description: Invalid binder update
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: AI provider error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -97,4 +127,45 @@ components:
           type: string
       required:
         - error
+    BinderInsightInput:
+      type: object
+      properties:
+        binder:
+          type: string
+          minLength: 20
+          maxLength: 12000
+        update:
+          type: string
+          minLength: 3
+          maxLength: 4000
+        todos:
+          type: array
+          items:
+            type: string
+        completed:
+          type: array
+          items:
+            type: string
+      required:
+        - binder
+        - update
+        - todos
+        - completed
+    BinderInsightResponse:
+      type: object
+      properties:
+        completed:
+          type: array
+          items:
+            type: string
+        add:
+          type: array
+          items:
+            type: string
+        focus:
+          type: string
+      required:
+        - completed
+        - add
+        - focus
 

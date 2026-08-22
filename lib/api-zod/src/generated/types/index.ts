@@ -7,6 +7,8 @@
  */
 
 export * from './apiError';
+export * from './binderInsightInput';
+export * from './binderInsightResponse';
 export * from './healthStatus';
 export * from './researchQuestionInput';
 export * from './researchResponse';

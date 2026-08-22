@@ -30,3 +30,24 @@ export interface ApiError {
   error: string;
 }
 
+export interface BinderInsightInput {
+  /**
+     * @minLength 20
+     * @maxLength 12000
+     */
+  binder: string;
+  /**
+     * @minLength 3
+     * @maxLength 4000
+     */
+  update: string;
+  todos: string[];
+  completed: string[];
+}
+
+export interface BinderInsightResponse {
+  completed: string[];
+  add: string[];
+  focus: string;
+}
+

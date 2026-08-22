@@ -41,3 +41,28 @@ export const AskGeminiResearchResponse = zod.object({
 })
 
 
+/**
+ * @summary Turn binder progress into checklist updates
+ */
+export const updateGeminiBinderPlanBodyBinderMin = 20;
+export const updateGeminiBinderPlanBodyBinderMax = 12000;
+
+export const updateGeminiBinderPlanBodyUpdateMin = 3;
+export const updateGeminiBinderPlanBodyUpdateMax = 4000;
+
+
+
+export const UpdateGeminiBinderPlanBody = zod.object({
+  "binder": zod.string().min(updateGeminiBinderPlanBodyBinderMin).max(updateGeminiBinderPlanBodyBinderMax),
+  "update": zod.string().min(updateGeminiBinderPlanBodyUpdateMin).max(updateGeminiBinderPlanBodyUpdateMax),
+  "todos": zod.array(zod.string()),
+  "completed": zod.array(zod.string())
+})
+
+export const UpdateGeminiBinderPlanResponse = zod.object({
+  "completed": zod.array(zod.string()),
+  "add": zod.array(zod.string()),
+  "focus": zod.string()
+})
+
+

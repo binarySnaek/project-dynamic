@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AlertCircle, BookOpen, Check, CheckCircle2, Clipboard, ExternalLink, FlaskConical, Info, Link2, ListChecks, NotebookPen, Plus, RotateCcw, Send, Sparkles, Trash2, WandSparkles } from 'lucide-react';
-import { useAskGeminiResearch } from '@workspace/api-client-react';
+import { useAskGeminiResearch, useUpdateGeminiBinderPlan } from '@workspace/api-client-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
@@ -12,6 +12,7 @@ const SOURCE_KEY = 'science-research-sources';
 const NOTES_KEY = 'science-research-notes';
 const TODO_KEY = 'dynamic-planet-todos';
 const UPDATES_KEY = 'dynamic-planet-updates';
+const BINDER_KEY = 'project-dynamic-binder';
 
 type Source = { id: string; url: string };
 type SavedNote = { id: string; question: string; answer: string; subject: string; createdAt: string };
@@ -57,6 +58,37 @@ function renderAnswer(text: string) {
   });
 }
 
+function BinderSetup({ onComplete }: { onComplete: (binder: string) => void }) {
+  const [binder, setBinder] = useState('');
+  const [message, setMessage] = useState('');
+
+  const saveBinder = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (binder.trim().length < 20) {
+      setMessage('Add the contents of your binder so Project Dynamic has enough context to help.');
+      return;
+    }
+    window.localStorage.setItem(BINDER_KEY, binder.trim());
+    onComplete(binder.trim());
+  };
+
+  return (
+    <div className="setup-screen">
+      <div className="setup-mark"><FlaskConical size={22} /></div>
+      <div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>Project Dynamic / Setup</div>
+      <h1>Bring your binder<br /><em>to the table.</em></h1>
+      <p className="setup-copy">Before the workspace opens, paste or describe your entire Dynamic Planet binder. Project Dynamic uses this as your map so its suggestions build on what you actually have.</p>
+      <form className="setup-form" onSubmit={saveBinder}>
+        <label className="question-label" htmlFor="binder-inventory">Your complete binder inventory</label>
+        <textarea id="binder-inventory" value={binder} onChange={(event) => { setBinder(event.target.value); setMessage(''); }} placeholder="List every section, page, diagram, table, vocabulary list, and topic currently in your binder..." data-testid="input-binder-inventory" />
+        {message && <div className="setup-message" role="alert" data-testid="status-binder-setup">{message}</div>}
+        <button className="primary-button" type="submit" data-testid="button-open-project-dynamic"><BookOpen size={15} /> Open Project Dynamic</button>
+      </form>
+      <div className="setup-note"><Info size={14} /> Your binder inventory stays in this browser and is sent to Gemini only when you ask for research or plan updates.</div>
+    </div>
+  );
+}
+
 function Home() {
   const [question, setQuestion] = useState('');
   const [subject, setSubject] = useState('');
@@ -66,6 +98,7 @@ function Home() {
   const [notes, setNotes] = useState<SavedNote[]>(() => readStorage<SavedNote[]>(NOTES_KEY, []));
   const [todos, setTodos] = useState<Todo[]>(() => readStorage<Todo[]>(TODO_KEY, starterTodos));
   const [updates, setUpdates] = useState<BinderUpdate[]>(() => readStorage<BinderUpdate[]>(UPDATES_KEY, []));
+  const [binder, setBinder] = useState(() => readStorage<string>(BINDER_KEY, ''));
   const [sourceUrl, setSourceUrl] = useState('');
   const [newTodo, setNewTodo] = useState('');
   const [updateSection, setUpdateSection] = useState('');
@@ -73,7 +106,9 @@ function Home() {
   const [errorMessage, setErrorMessage] = useState('');
   const [validationMessage, setValidationMessage] = useState('');
   const [feedback, setFeedback] = useState('');
+  const [insightFocus, setInsightFocus] = useState('');
   const askResearch = useAskGeminiResearch();
+  const updateBinderPlan = useUpdateGeminiBinderPlan();
 
   useEffect(() => {
     window.localStorage.setItem(SOURCE_KEY, JSON.stringify(sources));
@@ -161,6 +196,30 @@ function Home() {
     setUpdateSection('');
     setUpdateText('');
     setFeedback('Binder update saved locally');
+    updatePlan(update);
+  };
+
+  const updatePlan = (latestUpdate: string) => {
+    updateBinderPlan.mutate({
+      data: {
+        binder,
+        update: latestUpdate,
+        todos: todos.map((todo) => todo.label),
+        completed: todos.filter((todo) => todo.done).map((todo) => todo.label),
+      },
+    }, {
+      onSuccess: (result) => {
+        setTodos((current) => {
+          const completedLabels = new Set(result.completed);
+          const existingLabels = new Set(current.map((todo) => todo.label.toLowerCase()));
+          const added = result.add.filter((label) => label.trim() && !existingLabels.has(label.toLowerCase())).map((label) => ({ id: `${Date.now()}-${label}`, label, done: false }));
+          return [...current.map((todo) => completedLabels.has(todo.label) ? { ...todo, done: true } : todo), ...added];
+        });
+        setInsightFocus(result.focus);
+        setFeedback(result.add.length ? 'AI updated your checklist with new branches' : 'AI checked your binder progress');
+      },
+      onError: () => setFeedback('Update saved; AI plan update is unavailable right now'),
+    });
   };
 
   const chooseSample = (sample: string) => {
@@ -213,12 +272,18 @@ function Home() {
     setNotes([]);
     setTodos(starterTodos);
     setUpdates([]);
+    setBinder('');
+    window.localStorage.removeItem(BINDER_KEY);
     setFeedback('Session cleared');
   };
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+
+  if (!binder.trim()) {
+    return <BinderSetup onComplete={setBinder} />;
+  }
 
   return (
     <div className="workspace">
@@ -276,7 +341,7 @@ function Home() {
 
           <div className="main-content">
             <section className="intro" data-testid="section-introduction">
-              <div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>Dynamic Planet / Division B</div>
+              <div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>Project Dynamic / Division B</div>
               <h1>Build a binder<br />with <em>solid ground.</em></h1>
               <p>Your personal Dynamic Planet field notebook. Track sections, log what you finished, and ask for the next useful branch to add.</p>
               <button className="insight-button" onClick={askForInsights} data-testid="button-binder-insights"><WandSparkles size={15} /> Ask what to add next</button>
@@ -405,8 +470,9 @@ function Home() {
                   <form className="update-form" onSubmit={addUpdate}>
                     <input value={updateSection} onChange={(event) => setUpdateSection(event.target.value)} placeholder="Section name" aria-label="Updated section name" data-testid="input-update-section" />
                     <textarea value={updateText} onChange={(event) => setUpdateText(event.target.value)} placeholder="What did you add or learn?" aria-label="Binder update" data-testid="input-update-text" />
-                    <button className="primary-button" type="submit" data-testid="button-save-update"><Plus size={14} /> Log update</button>
+                    <button className="primary-button" type="submit" disabled={updateBinderPlan.isPending} data-testid="button-save-update"><Plus size={14} /> {updateBinderPlan.isPending ? 'Updating plan...' : 'Log + update plan'}</button>
                   </form>
+                  {insightFocus && <div className="insight-box"><WandSparkles size={14} /><span><strong>AI focus:</strong> {insightFocus}</span></div>}
                   {updates.length > 0 && <div className="update-list">{updates.slice(0, 4).map((item) => <article className="update-item" key={item.id}><div><strong>{item.section}</strong><p>{item.update}</p></div><button className="icon-button" onClick={() => setUpdates((current) => current.filter((update) => update.id !== item.id))} aria-label="Delete binder update"><Trash2 size={13} /></button></article>)}</div>}
                 </section>
 
