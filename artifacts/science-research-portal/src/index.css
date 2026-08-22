@@ -212,6 +212,8 @@
 .notice svg { flex: 0 0 auto; margin-top: 1px; color: hsl(var(--accent)); }
 .session-stack { display: grid; gap: 17px; animation: rise-in .55s .16s ease both; }
 .session-card { padding: 20px; }
+.insight-button { display: inline-flex; align-items: center; gap: 8px; margin-top: 22px; padding: 10px 14px; border: 1px solid hsl(var(--primary) / .45); border-radius: 8px; background: hsl(var(--primary) / .08); color: hsl(var(--primary)); font-size: 12px; font-weight: 700; cursor: pointer; transition: transform .2s ease, background .2s ease; }
+.insight-button:hover { transform: translateY(-2px); background: hsl(var(--primary) / .16); }
 .session-card h3 { font-size: 14px; margin: 3px 0 5px; }
 .session-card p { font-size: 11px; color: hsl(var(--muted-foreground)); line-height: 1.5; margin: 0; }
 .session-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
@@ -227,6 +229,24 @@
 .note-item { display: block; }
 .note-item time { display: block; color: hsl(var(--muted-foreground)); font: 9px var(--app-font-mono); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
 .note-item p { color: hsl(var(--foreground)); white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.todo-list { display: grid; gap: 5px; }
+.todo-item { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 6px; border: 0; border-radius: 7px; background: transparent; color: hsl(var(--foreground)); text-align: left; font-size: 11px; line-height: 1.35; cursor: pointer; transition: background .2s ease, color .2s ease; }
+.todo-item:hover { background: hsl(var(--muted)); }
+.todo-item svg { flex: 0 0 auto; color: hsl(var(--border)); transition: color .2s ease, fill .2s ease; }
+.todo-item.done { color: hsl(var(--muted-foreground)); text-decoration: line-through; }
+.todo-item.done svg { color: hsl(var(--primary)); fill: hsl(var(--primary) / .15); }
+.add-todo-form { display: flex; gap: 6px; margin-top: 11px; border-top: 1px dashed hsl(var(--border)); padding-top: 11px; }
+.add-todo-form input, .update-form input, .update-form textarea { min-width: 0; width: 100%; border: 1px solid hsl(var(--input)); border-radius: 7px; padding: 8px 9px; background: transparent; outline: none; color: hsl(var(--foreground)); font-size: 11px; }
+.add-todo-form input:focus, .update-form input:focus, .update-form textarea:focus { border-color: hsl(var(--primary)); }
+.add-todo-form .icon-button { border: 1px solid hsl(var(--border)); }
+.update-form { display: grid; gap: 7px; }
+.update-form textarea { min-height: 64px; resize: vertical; }
+.update-form .primary-button { width: 100%; padding: 9px 11px; }
+.update-list { display: grid; gap: 7px; margin-top: 13px; }
+.update-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; padding: 9px; border-radius: 7px; background: hsl(var(--background) / .55); }
+.update-item strong { display: block; margin-bottom: 3px; color: hsl(var(--foreground)); font-size: 11px; }
+.update-item p { white-space: pre-wrap; }
+.answer-body strong { color: hsl(var(--primary)); font-weight: 800; }
 .skeleton { background: linear-gradient(90deg, hsl(var(--muted)), hsl(var(--card)), hsl(var(--muted))); background-size: 200% 100%; animation: shimmer 1.3s infinite; border-radius: 5px; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 .error-box { margin-top: 22px; border: 1px solid hsl(var(--destructive) / .35); background: hsl(var(--destructive) / .08); color: hsl(var(--destructive)); border-radius: 10px; padding: 14px; display: flex; justify-content: space-between; gap: 15px; align-items: center; font-size: 12px; }

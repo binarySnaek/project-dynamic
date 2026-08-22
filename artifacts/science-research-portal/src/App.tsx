@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AlertCircle, BookOpen, Check, Clipboard, ExternalLink, FlaskConical, Info, Link2, NotebookPen, Plus, RotateCcw, Send, Sparkles, Trash2 } from 'lucide-react';
+import { AlertCircle, BookOpen, Check, CheckCircle2, Clipboard, ExternalLink, FlaskConical, Info, Link2, ListChecks, NotebookPen, Plus, RotateCcw, Send, Sparkles, Trash2, WandSparkles } from 'lucide-react';
 import { useAskGeminiResearch } from '@workspace/api-client-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -10,9 +10,22 @@ import './index.css';
 const queryClient = new QueryClient();
 const SOURCE_KEY = 'science-research-sources';
 const NOTES_KEY = 'science-research-notes';
+const TODO_KEY = 'dynamic-planet-todos';
+const UPDATES_KEY = 'dynamic-planet-updates';
 
 type Source = { id: string; url: string };
 type SavedNote = { id: string; question: string; answer: string; subject: string; createdAt: string };
+type Todo = { id: string; label: string; done: boolean };
+type BinderUpdate = { id: string; section: string; update: string; createdAt: string };
+
+const starterTodos: Todo[] = [
+  { id: 'earth-structure', label: 'Earth structure and composition', done: false },
+  { id: 'plate-tectonics', label: 'Plate tectonics and boundaries', done: false },
+  { id: 'minerals-rocks', label: 'Minerals, rocks, and the rock cycle', done: false },
+  { id: 'surface-processes', label: 'Surface processes and landforms', done: false },
+  { id: 'hazards', label: 'Geologic hazards and preparedness', done: false },
+  { id: 'maps', label: 'Maps, models, and data interpretation', done: false },
+];
 
 const samples = [
   'How do mycorrhizal fungi help plants survive drought?',
@@ -29,6 +42,21 @@ function readStorage<T>(key: string, fallback: T): T {
   }
 }
 
+function renderAnswer(text: string) {
+  return text.split(/\n\s*\n/).map((paragraph, index) => {
+    const cleaned = paragraph.replace(/^#{1,4}\s+/gm, '');
+    return (
+      <p key={`${paragraph.slice(0, 12)}-${index}`}>
+        {cleaned.split(/(\*\*[^*]+\*\*)/g).map((part, partIndex) =>
+          part.startsWith('**') && part.endsWith('**')
+            ? <strong key={partIndex}>{part.slice(2, -2)}</strong>
+            : part,
+        )}
+      </p>
+    );
+  });
+}
+
 function Home() {
   const [question, setQuestion] = useState('');
   const [subject, setSubject] = useState('');
@@ -36,7 +64,12 @@ function Home() {
   const [answer, setAnswer] = useState<{ answer: string; model: string } | null>(null);
   const [sources, setSources] = useState<Source[]>(() => readStorage<Source[]>(SOURCE_KEY, []));
   const [notes, setNotes] = useState<SavedNote[]>(() => readStorage<SavedNote[]>(NOTES_KEY, []));
+  const [todos, setTodos] = useState<Todo[]>(() => readStorage<Todo[]>(TODO_KEY, starterTodos));
+  const [updates, setUpdates] = useState<BinderUpdate[]>(() => readStorage<BinderUpdate[]>(UPDATES_KEY, []));
   const [sourceUrl, setSourceUrl] = useState('');
+  const [newTodo, setNewTodo] = useState('');
+  const [updateSection, setUpdateSection] = useState('');
+  const [updateText, setUpdateText] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [validationMessage, setValidationMessage] = useState('');
   const [feedback, setFeedback] = useState('');
@@ -49,6 +82,12 @@ function Home() {
   useEffect(() => {
     window.localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
   }, [notes]);
+  useEffect(() => {
+    window.localStorage.setItem(TODO_KEY, JSON.stringify(todos));
+  }, [todos]);
+  useEffect(() => {
+    window.localStorage.setItem(UPDATES_KEY, JSON.stringify(updates));
+  }, [updates]);
 
   useEffect(() => {
     if (!feedback) return;
@@ -85,6 +124,43 @@ function Home() {
         },
       },
     );
+  };
+
+  const askForInsights = () => {
+    setQuestion('Based on my Dynamic Planet binder progress, what should I add next and what branches of sections should I investigate?');
+    setSubject('Dynamic Planet — Division B');
+    setContext([
+      `Binder checklist: ${todos.map((todo) => `${todo.done ? '[done]' : '[open]'} ${todo.label}`).join('; ')}`,
+      updates.length ? `My updates: ${updates.map((item) => `${item.section}: ${item.update}`).join(' | ')}` : 'I have not logged any updates yet.',
+      'Suggest practical binder sections, diagrams, vocabulary, comparison tables, and study checks. Prioritize gaps and do not assume I have completed anything not marked done.',
+    ].join('\n'));
+    window.setTimeout(() => document.getElementById('question-field')?.focus(), 0);
+    setFeedback('Insight prompt prepared from your binder');
+  };
+
+  const toggleTodo = (id: string) => {
+    setTodos((current) => current.map((todo) => todo.id === id ? { ...todo, done: !todo.done } : todo));
+    setFeedback('Binder checklist updated');
+  };
+
+  const addTodo = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const label = newTodo.trim();
+    if (!label) return;
+    setTodos((current) => [...current, { id: `${Date.now()}`, label, done: false }]);
+    setNewTodo('');
+    setFeedback('Section added to your checklist');
+  };
+
+  const addUpdate = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const section = updateSection.trim();
+    const update = updateText.trim();
+    if (!section || !update) return;
+    setUpdates((current) => [{ id: `${Date.now()}`, section, update, createdAt: new Date().toISOString() }, ...current]);
+    setUpdateSection('');
+    setUpdateText('');
+    setFeedback('Binder update saved locally');
   };
 
   const chooseSample = (sample: string) => {
@@ -135,6 +211,8 @@ function Home() {
     if (!window.confirm('Clear saved sources and notes from this session?')) return;
     setSources([]);
     setNotes([]);
+    setTodos(starterTodos);
+    setUpdates([]);
     setFeedback('Session cleared');
   };
 
@@ -160,6 +238,14 @@ function Home() {
             <button className="nav-item" onClick={() => scrollTo('saved-notes')} data-testid="button-nav-notes">
               <NotebookPen size={15} /> Saved notes
               {notes.length > 0 && <span className="ml-auto text-[10px]" style={{ color: 'hsl(var(--sidebar-primary))' }}>{notes.length}</span>}
+            </button>
+            <button className="nav-item" onClick={() => scrollTo('binder-plan')} data-testid="button-nav-plan">
+              <ListChecks size={15} /> Binder plan
+              {todos.filter((todo) => todo.done).length > 0 && <span className="ml-auto text-[10px]" style={{ color: 'hsl(var(--sidebar-primary))' }}>{todos.filter((todo) => todo.done).length}/{todos.length}</span>}
+            </button>
+            <button className="nav-item" onClick={() => scrollTo('binder-updates')} data-testid="button-nav-updates">
+              <NotebookPen size={15} /> My updates
+              {updates.length > 0 && <span className="ml-auto text-[10px]" style={{ color: 'hsl(var(--sidebar-primary))' }}>{updates.length}</span>}
             </button>
             <button className="nav-item" onClick={() => scrollTo('source-shelf')} data-testid="button-nav-sources">
               <Link2 size={15} /> Source shelf
@@ -190,9 +276,10 @@ function Home() {
 
           <div className="main-content">
             <section className="intro" data-testid="section-introduction">
-              <div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>Research desk / 01</div>
-              <h1>Turn a question<br />into <em>solid ground.</em></h1>
-              <p>A focused starting point for school-approved Science Olympiad research. Get a clear explanation, then follow the trail back to primary sources.</p>
+              <div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>Dynamic Planet / Division B</div>
+              <h1>Build a binder<br />with <em>solid ground.</em></h1>
+              <p>Your personal Dynamic Planet field notebook. Track sections, log what you finished, and ask for the next useful branch to add.</p>
+              <button className="insight-button" onClick={askForInsights} data-testid="button-binder-insights"><WandSparkles size={15} /> Ask what to add next</button>
             </section>
 
             <div className="work-grid">
@@ -200,9 +287,9 @@ function Home() {
                 <section className="question-card" id="question-desk" data-testid="card-question-desk">
                   <div className="card-heading">
                     <div>
-                      <div className="step-number">01 / ASK</div>
+                      <div className="step-number">01 / RESEARCH</div>
                       <h2>What are you trying to understand?</h2>
-                      <p>Specific questions lead to more useful, checkable notes.</p>
+                      <p>Ask about a Dynamic Planet concept, event, diagram, or data set.</p>
                     </div>
                     <BookOpen size={20} strokeWidth={1.5} style={{ color: 'hsl(var(--muted-foreground))' }} />
                   </div>
@@ -223,6 +310,7 @@ function Home() {
                         <label className="question-label" htmlFor="subject-field">Subject <span style={{ opacity: .65 }}>(optional)</span></label>
                         <select id="subject-field" className="field-control" value={subject} onChange={(event) => setSubject(event.target.value)} data-testid="select-research-subject">
                           <option value="">Choose a subject</option>
+                          <option value="Dynamic Planet — Division B">Dynamic Planet — Division B</option>
                           <option value="Anatomy and Physiology">Anatomy and Physiology</option>
                           <option value="Biology">Biology</option>
                           <option value="Chemistry">Chemistry</option>
@@ -277,7 +365,7 @@ function Home() {
                       <div className="model-label" data-testid="text-research-model">via {answer.model}</div>
                     </div>
                     <div className="answer-body" data-testid="text-research-answer">
-                      {answer.answer.split(/\n\s*\n/).map((paragraph, index) => <p key={`${paragraph.slice(0, 12)}-${index}`}>{paragraph}</p>)}
+                      {renderAnswer(answer.answer)}
                     </div>
                     <div className="notice">
                       <Info size={15} />
@@ -295,9 +383,36 @@ function Home() {
               </div>
 
               <aside className="session-stack" aria-label="Research session">
+                <section className="session-card binder-card" id="binder-plan" data-testid="card-binder-plan">
+                  <div className="session-header">
+                    <div><div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>02 / PLAN</div><h3>Binder plan</h3><p>{todos.filter((todo) => todo.done).length} of {todos.length} sections checked off.</p></div>
+                    <span className="session-count" data-testid="text-todo-count">{todos.filter((todo) => todo.done).length}</span>
+                  </div>
+                  <div className="todo-list">
+                    {todos.map((todo) => <button className={`todo-item ${todo.done ? 'done' : ''}`} key={todo.id} onClick={() => toggleTodo(todo.id)} data-testid={`button-todo-${todo.id}`}><CheckCircle2 size={16} /><span>{todo.label}</span></button>)}
+                  </div>
+                  <form className="add-todo-form" onSubmit={addTodo}>
+                    <input value={newTodo} onChange={(event) => setNewTodo(event.target.value)} placeholder="Add a section branch..." aria-label="New binder section" data-testid="input-new-todo" />
+                    <button className="icon-button" type="submit" aria-label="Add binder section" data-testid="button-add-todo"><Plus size={15} /></button>
+                  </form>
+                </section>
+
+                <section className="session-card updates-card" id="binder-updates" data-testid="card-binder-updates">
+                  <div className="session-header">
+                    <div><div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>03 / LOG</div><h3>My updates</h3><p>Tell the AI what made it into your binder.</p></div>
+                    <span className="session-count" data-testid="text-update-count">{updates.length}</span>
+                  </div>
+                  <form className="update-form" onSubmit={addUpdate}>
+                    <input value={updateSection} onChange={(event) => setUpdateSection(event.target.value)} placeholder="Section name" aria-label="Updated section name" data-testid="input-update-section" />
+                    <textarea value={updateText} onChange={(event) => setUpdateText(event.target.value)} placeholder="What did you add or learn?" aria-label="Binder update" data-testid="input-update-text" />
+                    <button className="primary-button" type="submit" data-testid="button-save-update"><Plus size={14} /> Log update</button>
+                  </form>
+                  {updates.length > 0 && <div className="update-list">{updates.slice(0, 4).map((item) => <article className="update-item" key={item.id}><div><strong>{item.section}</strong><p>{item.update}</p></div><button className="icon-button" onClick={() => setUpdates((current) => current.filter((update) => update.id !== item.id))} aria-label="Delete binder update"><Trash2 size={13} /></button></article>)}</div>}
+                </section>
+
                 <section className="session-card" id="source-shelf" data-testid="card-source-shelf">
                   <div className="session-header">
-                    <div><div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>02 / TRACE</div><h3>Source shelf</h3><p>Keep the links you plan to check.</p></div>
+                    <div><div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>04 / TRACE</div><h3>Source shelf</h3><p>Keep the links you plan to check.</p></div>
                     <span className="session-count" data-testid="text-source-count">{sources.length}</span>
                   </div>
                   <form className="source-form" onSubmit={addSource} data-testid="form-add-source">
@@ -318,7 +433,7 @@ function Home() {
 
                 <section className="session-card" id="saved-notes" data-testid="card-saved-notes">
                   <div className="session-header">
-                    <div><div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>03 / KEEP</div><h3>Saved notes</h3><p>Only this browser can see this session.</p></div>
+                    <div><div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>05 / KEEP</div><h3>Saved notes</h3><p>Only this browser can see this session.</p></div>
                     <span className="session-count" data-testid="text-note-count">{notes.length}</span>
                   </div>
                   {notes.length === 0 ? <div className="empty-mini"><NotebookPen size={17} className="mx-auto mb-2 opacity-50" />Your useful answers will live here.</div> : (
