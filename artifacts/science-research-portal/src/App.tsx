@@ -1,7 +1,7 @@
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AlertCircle, BookOpen, Check, CheckCircle2, Clipboard, ExternalLink, FlaskConical, Info, Link2, ListChecks, NotebookPen, Plus, RotateCcw, Send, Sparkles, Trash2, WandSparkles } from 'lucide-react';
-import { useAnalyzeBinderStructure, useAskGeminiResearch, useUpdateGeminiBinderPlan } from '@workspace/api-client-react';
+import { useAskGeminiResearch, useUpdateGeminiBinderPlan, useAnalyzeBinderStructure } from '@workspace/api-client-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
@@ -61,43 +61,48 @@ type SkeletonLine = {
   body: string;
 };
 
-// Sent to Gemini once a real structure/analysis endpoint exists — plug this into
-// that prompt's system/instruction text. The local parser below already enforces
-// the same rule so table-of-contents lines don't pollute the skeleton today.
-// This is the prompt text for the backend's binder-structure endpoint (paste it
-// into that endpoint's system/instruction text — it does not get sent from the
-// client on every call).
-const GEMINI_STRUCTURE_INSTRUCTIONS = `You are parsing a student's competition binder ("Dynamic Planet") into a structured outline.
+// Sent to Gemini as part of the binder-structure analysis request (see analyzeBinder
+// below) so the backend prompt follows the same table-of-contents rule the local
+// parser already enforces — LETTER0 lines (e.g. A0, B0) are TOC entries, not sections.
+const GEMINI_FORMAT_INSTRUCTIONS = `Contents will be in the form of LETTER, LETTER.NUMBER, or LETTER.NUMBER.NUMBER, UNLESS it is in a table of contents, which will ALWAYS be in the form of LETTER0 (e.g. A0, B0). Never treat a LETTER0 line as a real section — it only marks a table-of-contents entry and should be ignored when building the outline.`;
 
-SECTION CODES: A real section heading is a single letter, optionally followed by digits separated by dots, indicating nesting depth:
-  - "A" or "A." — a top-level section (depth 1)
-  - "A1" or "A1." — a subsection (depth 2)
-  - "A1.1" or "A1.1." — a sub-subsection (depth 3)
-  - deeper nesting follows the same pattern (A1.1.1, etc.)
-A bare letter with no digits (like "A") is only a heading if followed by a period. Do not treat an ordinary sentence, list item, or paragraph that happens to start with a capital letter as a heading.
+// Shape expected back from the useAnalyzeGeminiBinderStructure hook: one status/note
+// pair per skeleton code (e.g. "B2.1"), covering every code sent in the request.
+type BinderStructureAnalysisResult = {
+  sections: { code: string; status: TocNode['status']; note: string }[];
+};
 
-TABLE OF CONTENTS: Lines shaped like LETTER0 (A0, B0, C0, ...) are table-of-contents markers, NEVER real sections. Skip them entirely.
+const TOC_MARKER_PATTERN = /^[A-Za-z]+0$/;
+// Subsections/sub-subsections always have a digit right after the letter(s), e.g.
+// "A1.", "A1.1" — no ordinary English word looks like that, so this is unambiguous.
+const CODED_HEADING_PATTERN = /^([A-Za-z]{1,2}\d+(?:\.\d+)*)\.?\s+(.+)$/;
+// Top-level sections are a single letter with NO digit, e.g. "A." — this is the
+// dangerous case, since "A" alone can't be told apart from an ordinary word. The
+// old version allowed zero digits here too, so "The", "Plate", "Convergent", etc.
+// at the start of any paragraph all matched as if they were section codes. Locking
+// this to exactly one letter AND a mandatory trailing period closes that hole.
+const BARE_LETTER_HEADING_PATTERN = /^([A-Za-z])\.\s+(.+)$/;
+const MAX_HEADING_WORDS = 14;
 
-For each real section heading you find, capture: the code (e.g. "A1.1"), the title text on that heading line, the nesting depth, and all body text that follows it up until the next heading.
-
-Return ONLY a JSON array (no prose, no markdown fences) shaped like:
-[{ "code": string, "title": string, "depth": number, "body": string }, ...]`;
-
-//const TOC_MARKER_PATTERN = /^[A-Za-z]+0$/;
-
-function skeletonDepth(digits: string): number {
+function skeletonDepth(code: string): number {
+  const digits = code.replace(/^[A-Za-z]+/, '');
   if (!digits) return 1;
   return 1 + digits.split('.').filter(Boolean).length;
 }
 
-// Pure structure parsing — no AI needed, so this step is instant and never fails.
-// Section codes are a single letter, optionally followed by digits (with dots)
-// for sub-levels: "A", "A1", "A1.1", "A1.1.2". A bare letter with no digits
-// MUST be followed by a period ("A." not just "A ") — otherwise ordinary
-// sentences starting with a capital letter would be misread as headings.
-// Table-of-contents lines are a letter followed by exactly "0" ("A0", "B0",
-// "C0") and are never real sections — they're always skipped.
-const HEADING_PATTERN = /^([A-Z])(?:(\d+(?:\.\d+)*)(\.)?|(\.))\s+(.+)$/;
+// A real section title (e.g. "A. Plate Tectonics", "A1. Convergent Boundaries",
+// "A1.1 Subduction Zones") is a short topic name on its own line — not a full
+// sentence. This guards against the classic false positive: a lettered list
+// INSIDE a paragraph ("A. First reason... B. Second reason...") that happens to
+// match the same code shape as a genuine heading.
+function looksLikeRealHeading(title: string): boolean {
+  const words = title.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0 || words.length > MAX_HEADING_WORDS) return false;
+  // Bails if the "title" clearly keeps going as prose — a period or semicolon
+  // followed by more words is the shape of a sentence, not a topic name.
+  if (/[.;]\s+[A-Za-z]/.test(title)) return false;
+  return true;
+}
 
 // Pure structure parsing — no AI needed, so this step is instant and never fails.
 function parseSkeletonLines(rawText: string): SkeletonLine[] {
@@ -107,18 +112,18 @@ function parseSkeletonLines(rawText: string): SkeletonLine[] {
   for (const rawLine of rawText.split('\n')) {
     const line = rawLine.trim();
     if (!line) continue;
+    const match = line.match(CODED_HEADING_PATTERN) || line.match(BARE_LETTER_HEADING_PATTERN);
 
-    const match = line.match(HEADING_PATTERN);
-    if (match) {
-      const letter = match[1];
-      const digits = match[2] ?? '';
-      const title = match[5].trim();
+    if (match && TOC_MARKER_PATTERN.test(match[1])) {
+      // Table-of-contents line (e.g. "A0 Rocks") — never a real section, skip entirely.
+      continue;
+    }
 
-      // Table-of-contents entry (e.g. "A0 Rocks and Minerals ..... 4") — skip.
-      if (digits === '0') continue;
+    const isRealHeading = match && looksLikeRealHeading(match[2]);
 
+    if (isRealHeading) {
       if (current) entries.push(current);
-      current = { code: `${letter}${digits}`, title, depth: skeletonDepth(digits), body: '' };
+      current = { code: match[1], title: match[2].trim(), depth: skeletonDepth(match[1]), body: '' };
     } else if (current) {
       current.body = current.body ? `${current.body} ${line}` : line;
     }
@@ -127,7 +132,8 @@ function parseSkeletonLines(rawText: string): SkeletonLine[] {
   return entries;
 }
 
-// Interim gap-finding — replace with a real Gemini call once a backend hook exists for it.
+// Fallback only. Used if the Gemini structure-analysis call fails, so a flaky network
+// doesn't leave the student stuck without any TOC at all.
 function heuristicStatus(body: string): { status: TocNode['status']; note: string } {
   const wordCount = body.trim().split(/\s+/).filter(Boolean).length;
   if (wordCount === 0) return { status: 'missing', note: 'No content found under this heading yet.' };
@@ -166,11 +172,67 @@ const NOTES_KEY = 'science-research-notes';
 const TODO_KEY = 'dynamic-planet-todos';
 const UPDATES_KEY = 'dynamic-planet-updates';
 const BINDER_KEY = 'project-dynamic-binder';
+const TOC_ANALYSIS_KEY = 'TOC_ANALYSIS_KEY';
+const ACTIVE_PIN_KEY = 'project-dynamic-pin';
+const PIN_PATTERN = /^\d{4,8}$/;
 
 type Source = { id: string; url: string };
 type SavedNote = { id: string; question: string; answer: string; subject: string; createdAt: string };
 type Todo = { id: string; label: string; done: boolean };
 type BinderUpdate = { id: string; section: string; update: string; createdAt: string };
+
+// Everything the PIN system saves on the server and restores on another device.
+// Keep this in sync with what the /api/binder-sync routes accept and return.
+type BinderSyncState = {
+  binder: string;
+  todos: Todo[];
+  updates: BinderUpdate[];
+  sources: Source[];
+  notes: SavedNote[];
+  tocAnalysis: TocAnalysis | null;
+};
+
+// NOTE: these three assume the binder-sync router is mounted at "/api" on your
+// server, matching how the other Gemini routes are likely reached (e.g.
+// "/api/gemini/research"). If your server mounts things differently, update
+// the "/api" prefix in these three functions to match.
+async function fetchPinState(pin: string): Promise<{ ok: true; state: BinderSyncState } | { ok: false; error: string }> {
+  try {
+    const response = await fetch(`/api/binder-sync/${pin}`);
+    const data = await response.json();
+    if (!response.ok) return { ok: false, error: data.error || "We couldn't find that PIN." };
+    return { ok: true, state: data as BinderSyncState };
+  } catch {
+    return { ok: false, error: 'Could not reach the server. Check your connection and try again.' };
+  }
+}
+
+async function createPin(pin: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const response = await fetch('/api/binder-sync/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    });
+    const data = await response.json();
+    if (!response.ok) return { ok: false, error: data.error || 'Could not create that PIN.' };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'Could not reach the server. Check your connection and try again.' };
+  }
+}
+
+// Best-effort background save — local storage stays the source of truth for the
+// current tab, so a failed sync just means "not backed up yet," not data loss.
+function pushPinState(pin: string, state: BinderSyncState, onSettled: (ok: boolean) => void) {
+  fetch(`/api/binder-sync/${pin}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(state),
+  })
+    .then((response) => onSettled(response.ok))
+    .catch(() => onSettled(false));
+}
 
 const starterTodos: Todo[] = [
   { id: 'earth-structure', label: 'Earth structure and composition', done: false },
@@ -196,6 +258,18 @@ function readStorage<T>(key: string, fallback: T): T {
   }
 }
 
+// Overwrites every localStorage slot Home() reads on boot. Used both when a PIN
+// loads real saved data, and when a fresh PIN is created and old local leftovers
+// need clearing so setup starts clean.
+function writeLocalState(state: Partial<BinderSyncState>) {
+  window.localStorage.setItem(BINDER_KEY, JSON.stringify(state.binder ?? ''));
+  window.localStorage.setItem(TODO_KEY, JSON.stringify(state.todos ?? starterTodos));
+  window.localStorage.setItem(UPDATES_KEY, JSON.stringify(state.updates ?? []));
+  window.localStorage.setItem(SOURCE_KEY, JSON.stringify(state.sources ?? []));
+  window.localStorage.setItem(NOTES_KEY, JSON.stringify(state.notes ?? []));
+  window.localStorage.setItem(TOC_ANALYSIS_KEY, JSON.stringify(state.tocAnalysis ?? null));
+}
+
 function renderAnswer(text: string) {
   return text.split(/\n\s*\n/).map((paragraph, index) => {
     const cleaned = paragraph.replace(/^#{1,4}\s+/gm, '');
@@ -211,9 +285,10 @@ function renderAnswer(text: string) {
   });
 }
 
-    function BinderSetup({ onComplete, initialValue = '', isAnalyzing = false, errorMessage = '' }: { onComplete: (binder: string) => void; initialValue?: string; isAnalyzing?: boolean; errorMessage?: string }) {
-      const [binder, setBinder] = useState(initialValue);
-      const [message, setMessage] = useState('');
+  function BinderSetup({ onComplete, initialValue = '' }: { onComplete: (binder: string) => void; initialValue?: string }) {
+    const [binder, setBinder] = useState(initialValue);
+    const [message, setMessage] = useState('');
+    const isAnalyzing = false;
 
   const saveBinder = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -221,7 +296,10 @@ function renderAnswer(text: string) {
       setMessage('Add the contents of your binder so Project Dynamic has enough context to help.');
       return;
     }
-    window.localStorage.setItem(BINDER_KEY, binder.trim());
+    // Was previously saved as a raw string, but readStorage() always JSON.parses on
+    // read — that throws on real multi-line binder text and silently falls back to
+    // '', which is why the binder appeared to reset itself on every reload.
+    window.localStorage.setItem(BINDER_KEY, JSON.stringify(binder.trim()));
     onComplete(binder.trim());
   };
 
@@ -248,9 +326,11 @@ function renderAnswer(text: string) {
           {' '}·{' '}
           <strong style={{ color: 'hsl(var(--primary))' }}>Agent from Replit</strong>
           {' '}· and{' '}
-          <strong style={{ color: 'hsl(var(--primary))' }}>Claude</strong> 🚀
+          <strong style={{ color: 'hsl(var(--primary))' }}>you</strong> 🚀
         </p>
-        
+        <p style={{ fontSize: '10px', color: 'hsl(var(--muted-foreground) / 0.6)', margin: '4px 0 0' }}>
+          Special thanks to the Science Olympiad community
+        </p>
       </div>
 
       <form className="setup-form" onSubmit={saveBinder}>
@@ -264,7 +344,6 @@ function renderAnswer(text: string) {
           disabled={isAnalyzing}
         />
         {message && <div className="setup-message" role="alert" data-testid="status-binder-setup">{message}</div>}
-        {errorMessage && <div className="setup-message" role="alert" data-testid="status-binder-skim-error">{errorMessage}</div>}
         <button className="primary-button" type="submit" disabled={isAnalyzing} data-testid="button-open-project-dynamic">
           {isAnalyzing ? '🔍 Analyzing...' : <><BookOpen size={15} /> Open Project Dynamic</>}
         </button>
@@ -497,7 +576,140 @@ function TocSidebar({ toc, onNodeHover, hoveredNode }: {
   );
 }
 
-function Home() {
+// ============================================
+// PIN SYSTEM — lets a student resume their binder on a different
+// device by typing the PIN they created earlier. Mandatory: no PIN,
+// no entry, matching how a plain resume-code gate is supposed to work.
+// ============================================
+
+function PinGate() {
+  const [pin, setPin] = useState<string | null>(() => readStorage<string | null>(ACTIVE_PIN_KEY, null));
+
+  // Already unlocked on this device (a PIN was entered/created here before) —
+  // skip straight to the workspace instead of asking again every visit.
+  if (pin) {
+    return (
+      <Home
+        pin={pin}
+        onForgetPin={() => {
+          window.localStorage.removeItem(ACTIVE_PIN_KEY);
+          setPin(null);
+        }}
+      />
+    );
+  }
+
+  return (
+    <PinLanding
+      onUnlock={(newPin) => {
+        window.localStorage.setItem(ACTIVE_PIN_KEY, JSON.stringify(newPin));
+        setPin(newPin);
+      }}
+    />
+  );
+}
+
+function PinLanding({ onUnlock }: { onUnlock: (pin: string) => void }) {
+  const [mode, setMode] = useState<'choose' | 'enter' | 'create'>('choose');
+  const [pinInput, setPinInput] = useState('');
+  const [error, setError] = useState('');
+  const [isBusy, setIsBusy] = useState(false);
+
+  const openMode = (next: 'enter' | 'create') => {
+    setMode(next);
+    setPinInput('');
+    setError('');
+  };
+
+  const submitEnter = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmed = pinInput.trim();
+    if (!PIN_PATTERN.test(trimmed)) {
+      setError('Enter the 4 to 8 digit PIN you created.');
+      return;
+    }
+    setIsBusy(true);
+    setError('');
+    const result = await fetchPinState(trimmed);
+    setIsBusy(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    writeLocalState(result.state);
+    onUnlock(trimmed);
+  };
+
+  const submitCreate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmed = pinInput.trim();
+    if (!PIN_PATTERN.test(trimmed)) {
+      setError('Choose a PIN that is 4 to 8 digits.');
+      return;
+    }
+    setIsBusy(true);
+    setError('');
+    const result = await createPin(trimmed);
+    setIsBusy(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    // Fresh PIN — clear out any old local leftovers so setup starts clean.
+    writeLocalState({});
+    onUnlock(trimmed);
+  };
+
+  if (mode === 'choose') {
+    return (
+      <div className="setup-screen">
+        <div className="setup-mark"><FlaskConical size={22} /></div>
+        <div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>Project Dynamic</div>
+        <h1>Welcome back?<br /><em>Or starting fresh.</em></h1>
+        <p className="setup-copy">A PIN saves your binder, checklist, and notes so you can pick them up on any device — no account or password needed.</p>
+        <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
+          <button className="primary-button" onClick={() => openMode('enter')} data-testid="button-have-pin">I have a PIN</button>
+          <button className="outline-button" onClick={() => openMode('create')} data-testid="button-new-pin">Create a PIN</button>
+        </div>
+        <div className="setup-note"><Info size={14} /> Treat your PIN like a resume code, not a password — anyone who has it can open your binder.</div>
+      </div>
+    );
+  }
+
+  const isCreate = mode === 'create';
+  return (
+    <div className="setup-screen">
+      <div className="setup-mark"><FlaskConical size={22} /></div>
+      <div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>Project Dynamic</div>
+      {isCreate ? <h1>Pick a PIN<br /><em>to save your spot.</em></h1> : <h1>Enter your<br /><em>PIN.</em></h1>}
+      <p className="setup-copy">
+        {isCreate
+          ? "4 to 8 digits, whatever you'll remember. You'll still paste your binder in on the next screen — this PIN is just what lets you come back to it later."
+          : 'Type the PIN you created earlier to load your binder, checklist, and notes.'}
+      </p>
+      <form className="setup-form" onSubmit={isCreate ? submitCreate : submitEnter}>
+        <label className="question-label" htmlFor="pin-input">PIN</label>
+        <input
+          id="pin-input"
+          inputMode="numeric"
+          maxLength={8}
+          value={pinInput}
+          onChange={(event) => { setPinInput(event.target.value.replace(/\D/g, '')); setError(''); }}
+          placeholder="e.g. 4271"
+          data-testid="input-pin"
+          style={{ fontSize: '20px', letterSpacing: '4px', textAlign: 'center' }}
+        />
+        {error && <div className="setup-message" role="alert" data-testid="status-pin-error">{error}</div>}
+        <button className="primary-button" type="submit" disabled={isBusy} data-testid="button-submit-pin">
+          {isBusy ? 'Checking...' : isCreate ? 'Create PIN & continue' : 'Unlock my binder'}
+        </button>
+      </form>
+      <button className="outline-button" style={{ marginTop: '12px' }} onClick={() => setMode('choose')} data-testid="button-pin-back">Back</button>
+    </div>
+  );
+}
+
+function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
   const [question, setQuestion] = useState('');
   const [subject, setSubject] = useState('');
   const [context, setContext] = useState('');
@@ -517,20 +729,19 @@ function Home() {
   const [insightFocus, setInsightFocus] = useState('');
   const askResearch = useAskGeminiResearch();
   const updateBinderPlan = useUpdateGeminiBinderPlan();
-  const analyzeBinderStructure = useAnalyzeBinderStructure();
-  const [skimError, setSkimError] = useState('');
+  const analyzeBinderStructure = useAnalyzeGeminiBinderStructure();
   const [tocAnalysis, setTocAnalysis] = useState<TocAnalysis | null>(() => 
-    readStorage<TocAnalysis | null>('TOC_ANALYSIS_KEY', null)
+    readStorage<TocAnalysis | null>(TOC_ANALYSIS_KEY, null)
   );
   const [hoveredNode, setHoveredNode] = useState<TocNode | null>(null);
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [analysisMessage, setAnalysisMessage] = useState('');
   const [gapAnalysis, setGapAnalysis] = useState<GapAnalysis[]>([]);
   const [skeletonLines, setSkeletonLines] = useState<SkeletonLine[]>([]);
-  const [stage, setStage] = useState<'review' | 'analyzing' | 'ready'>(() =>
-    readStorage<'review' | 'analyzing' | 'ready'>('project-dynamic-stage', 'ready'),
-  );
+  const [stage, setStage] = useState<'review' | 'analyzing' | 'ready'>('ready');
   const [editingBinder, setEditingBinder] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
+  const hasHydratedRef = useRef(true);
 
   useEffect(() => {
     window.localStorage.setItem(SOURCE_KEY, JSON.stringify(sources));
@@ -546,9 +757,25 @@ function Home() {
     window.localStorage.setItem(UPDATES_KEY, JSON.stringify(updates));
   }, [updates]);
 
+  // Pushes the current binder/checklist/notes/sources to the server under this
+  // PIN a moment after anything changes, so another device can load it later.
+  // Skips the very first run after mount/hydration — that state either just
+  // came from the server (re-saving it would be pointless) or from a brand
+  // new PIN (nothing to push yet).
   useEffect(() => {
-    window.localStorage.setItem('project-dynamic-stage', JSON.stringify(stage));
-  }, [stage]);
+    if (hasHydratedRef.current) {
+      hasHydratedRef.current = false;
+      return;
+    }
+    setSyncStatus('syncing');
+    const timeout = window.setTimeout(() => {
+      pushPinState(pin, { binder, todos, updates, sources, notes, tocAnalysis }, (ok) => {
+        setSyncStatus(ok ? 'idle' : 'error');
+      });
+    }, 900);
+    return () => window.clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pin, binder, todos, updates, sources, notes, tocAnalysis]);
 
   useEffect(() => {
     if (!feedback) return;
@@ -693,14 +920,15 @@ function Home() {
   };
 
   const clearSession = () => {
-    if (!window.confirm('Clear saved sources and notes from this session?')) return;
-    setSources([]);
-    setNotes([]);
-    setTodos(starterTodos);
-    setUpdates([]);
-    setBinder('');
-    window.localStorage.removeItem(BINDER_KEY);
-    setFeedback('Session cleared');
+    if (!window.confirm("Clear your binder, checklist, and notes, and log out of this PIN? (Nothing already saved online under this PIN is touched — entering this PIN again would still have your old data.)")) return;
+    hasHydratedRef.current = true; // about to unmount — don't sync this wipe
+    writeLocalState({});
+    onForgetPin();
+  };
+
+  const switchPin = () => {
+    if (syncStatus === 'syncing' && !window.confirm('Still saving your latest changes — switch PINs anyway?')) return;
+    onForgetPin();
   };
 
   const scrollTo = (id: string) => {
@@ -711,31 +939,16 @@ function Home() {
   // GEMINI SKIM - Creates binder skeleton
   // ============================================
   const skimBinder = (binderContent: string) => {
-    setSkimError('');
-    analyzeBinderStructure.mutate(
-      { data: { binder: binderContent } },
-      {
-        onSuccess: (result) => {
-          setSkeletonLines(result.sections);
-          setStage('review');
-        },
-        onError: (error) => {
-          const apiError = error as { error?: string; message?: string };
-          setSkimError(apiError.error || apiError.message || 'Gemini could not read your binder structure. Try again, or edit the binder text.');
-        },
-      },
-    );
+    setSkeletonLines(parseSkeletonLines(binderContent));
+    setStage('review');
   };
 
-  const analyzeBinder = () => {
-    setStage('analyzing');
-    setAnalysisMessage('🧠 Matching your notes to each section...');
-    setAnalysisProgress(30);
-
-    // Structural + word-count pass runs locally and always succeeds.
-    // Swap this for a real Gemini call (content matching + new-section suggestions)
-    // once a backend hook for it exists — same input/output shape as below.
-    const statuses = new Map(skeletonLines.map((line) => [line.code, heuristicStatus(line.body)] as const));
+  // Takes a code -> {status, note} map (either from Gemini or the local fallback),
+  // builds the TOC tree + gap list from it, and lands the workspace on 'ready'.
+  const finishAnalysis = (
+    statuses: Map<string, { status: TocNode['status']; note: string }>,
+    resultMessage: string,
+  ) => {
     const nodes = buildTocTree(skeletonLines, statuses);
 
     const flatten = (list: TocNode[]): TocNode[] => list.flatMap((n) => [n, ...flatten(n.children)]);
@@ -756,9 +969,36 @@ function Home() {
     setAnalysisProgress(100);
     setGapAnalysis(gaps);
     setTocAnalysis({ nodes, summary: { total: flat.length, complete, partial, missing } });
-    window.localStorage.setItem('TOC_ANALYSIS_KEY', JSON.stringify({ nodes, summary: { total: flat.length, complete, partial, missing } }));
+    window.localStorage.setItem(TOC_ANALYSIS_KEY, JSON.stringify({ nodes, summary: { total: flat.length, complete, partial, missing } }));
     setStage('ready');
-    setFeedback('🎉 Binder structure and gaps mapped!');
+    setFeedback(resultMessage);
+  };
+
+  const analyzeBinder = () => {
+    setStage('analyzing');
+    setAnalysisMessage('🧠 Matching your notes to each section...');
+    setAnalysisProgress(30);
+
+    analyzeBinderStructure.mutate(
+      {
+        data: {
+          sections: skeletonLines.map((line) => ({ code: line.code, title: line.title, body: line.body })),
+          formatInstructions: GEMINI_FORMAT_INSTRUCTIONS,
+        },
+      },
+      {
+        onSuccess: (result: BinderStructureAnalysisResult) => {
+          const statuses = new Map(result.sections.map((item) => [item.code, { status: item.status, note: item.note }] as const));
+          finishAnalysis(statuses, '🎉 Binder structure and gaps mapped!');
+        },
+        onError: () => {
+          // Gemini call failed — fall back to the local word-count pass so the
+          // student still gets a usable TOC instead of being stuck on this screen.
+          const statuses = new Map(skeletonLines.map((line) => [line.code, heuristicStatus(line.body)] as const));
+          finishAnalysis(statuses, 'AI analysis unavailable — showing a quick local estimate instead');
+        },
+      },
+    );
   };
 
   const editSkeleton = () => setEditingBinder(true);
@@ -770,14 +1010,7 @@ function Home() {
   };
 
   if (!binder.trim() || editingBinder) {
-    return (
-      <BinderSetup
-        onComplete={handleBinderComplete}
-        initialValue={binder}
-        isAnalyzing={analyzeBinderStructure.isPending}
-        errorMessage={skimError}
-      />
-    );
+    return <BinderSetup onComplete={handleBinderComplete} initialValue={binder} />;
   }
 
   if (stage === 'review') {
@@ -832,6 +1065,10 @@ function Home() {
           <div className="eyebrow mb-3" style={{ color: 'rgba(247,239,218,.45)' }}>A good habit</div>
           <p className="m-0 text-xs leading-relaxed" style={{ color: 'rgba(247,239,218,.64)' }}>Ask narrowly. Check the original paper, dataset, or agency page before you cite it.</p>
           <div className="mt-5 border-t pt-4" style={{ borderColor: 'hsl(var(--sidebar-border))' }}>
+            <div className="text-[10px] mb-2" style={{ color: 'rgba(247,239,218,.45)' }}>PIN {pin}</div>
+            <button className="nav-item w-full p-0 hover:bg-transparent" onClick={switchPin} data-testid="button-switch-pin">
+              <RotateCcw size={14} /> Switch PIN
+            </button>
             <button className="nav-item w-full p-0 hover:bg-transparent" onClick={clearSession} data-testid="button-clear-session">
               <Trash2 size={14} /> Clear this session
             </button>
@@ -847,7 +1084,8 @@ function Home() {
             <span className="eyebrow">Science Olympiad / Fieldwork</span>
           </div>
           <div className="topbar-status ml-auto" data-testid="status-local-session">
-            <span className="status-dot" aria-hidden="true" /> Session saved locally
+            <span className="status-dot" aria-hidden="true" />
+            {syncStatus === 'syncing' ? 'Saving to your PIN...' : syncStatus === 'error' ? "Couldn't reach the server — saved locally only" : `Saved to PIN ${pin}`}
           </div>
         </header>
 
@@ -1050,7 +1288,7 @@ function Home() {
           flexDirection: 'column',
         }}>
           {/* Skeleton Review UI */}
-          
+
           {/* TOC Sidebar Component */}
           {tocAnalysis && (
             <TocSidebar 
@@ -1069,7 +1307,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Home />
+        <PinGate />
       </TooltipProvider>
     </QueryClientProvider>
   );

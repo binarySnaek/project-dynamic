@@ -244,4 +244,126 @@ ${binder}`;
   }
 });
 
+// ============================================================
+// PIN-based binder sync
+//
+// Lets a student resume their binder, checklist, notes, and sources on a
+// different device by typing the PIN they created earlier. No accounts, no
+// passwords — a PIN is just a resume code.
+//
+// Storage: a JSON file per PIN on disk (no database needed). This works fine
+// as long as the server has a persistent filesystem between requests, which
+// is normal for an always-on Express server. If this ever moves to a
+// platform that wipes the filesystem between deploys/restarts (serverless,
+// some autoscale setups), swap PIN_STORE_DIR's fs calls for a real database
+// or key-value store instead — everything above this comment is unaffected.
+// ============================================================
+
+import fs from "node:fs/promises";
+import path from "node:path";
+
+const PIN_STORE_DIR = path.join(process.cwd(), "data", "binder-pins");
+const PIN_PATTERN = /^\d{4,8}$/;
+
+type BinderSyncTodo = { id: string; label: string; done: boolean };
+type BinderSyncUpdate = { id: string; section: string; update: string; createdAt: string };
+type BinderSyncSource = { id: string; url: string };
+type BinderSyncNote = { id: string; question: string; answer: string; subject: string; createdAt: string };
+
+type BinderSyncState = {
+  binder: string;
+  todos: BinderSyncTodo[];
+  updates: BinderSyncUpdate[];
+  sources: BinderSyncSource[];
+  notes: BinderSyncNote[];
+  tocAnalysis: unknown;
+};
+
+const EMPTY_BINDER_STATE: BinderSyncState = {
+  binder: "",
+  todos: [],
+  updates: [],
+  sources: [],
+  notes: [],
+  tocAnalysis: null,
+};
+
+function pinFilePath(pin: string) {
+  // PIN_PATTERN (digits only) is checked before this is ever called, so pin
+  // can't contain path separators — safe to use directly in a filename.
+  return path.join(PIN_STORE_DIR, `${pin}.json`);
+}
+
+async function pinExists(pin: string): Promise<boolean> {
+  try {
+    await fs.access(pinFilePath(pin));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+router.post("/binder-sync/create", async (req, res) => {
+  const pin = typeof req.body?.pin === "string" ? req.body.pin.trim() : "";
+  if (!PIN_PATTERN.test(pin)) {
+    res.status(400).json({ error: "PINs are 4 to 8 digits." });
+    return;
+  }
+
+  try {
+    await fs.mkdir(PIN_STORE_DIR, { recursive: true });
+    if (await pinExists(pin)) {
+      res.status(409).json({ error: "That PIN is already taken — try a different one." });
+      return;
+    }
+    await fs.writeFile(pinFilePath(pin), JSON.stringify(EMPTY_BINDER_STATE, null, 2), "utf-8");
+    res.json({ ok: true });
+  } catch (error) {
+    req.log.error({ err: error }, "Failed to create binder PIN");
+    res.status(500).json({ error: "Could not create that PIN right now." });
+  }
+});
+
+router.get("/binder-sync/:pin", async (req, res) => {
+  const pin = (req.params.pin ?? "").trim();
+  if (!PIN_PATTERN.test(pin)) {
+    res.status(400).json({ error: "PINs are 4 to 8 digits." });
+    return;
+  }
+
+  try {
+    const raw = await fs.readFile(pinFilePath(pin), "utf-8");
+    res.json(JSON.parse(raw));
+  } catch {
+    res.status(404).json({ error: "We couldn't find that PIN. Double-check it, or create a new one." });
+  }
+});
+
+router.put("/binder-sync/:pin", async (req, res) => {
+  const pin = (req.params.pin ?? "").trim();
+  if (!PIN_PATTERN.test(pin)) {
+    res.status(400).json({ error: "PINs are 4 to 8 digits." });
+    return;
+  }
+
+  const body = req.body as Partial<BinderSyncState> | undefined;
+  const state: BinderSyncState = {
+    binder: typeof body?.binder === "string" ? body.binder : "",
+    todos: Array.isArray(body?.todos) ? body!.todos : [],
+    updates: Array.isArray(body?.updates) ? body!.updates : [],
+    sources: Array.isArray(body?.sources) ? body!.sources : [],
+    notes: Array.isArray(body?.notes) ? body!.notes : [],
+    tocAnalysis: body?.tocAnalysis ?? null,
+  };
+
+  try {
+    await fs.mkdir(PIN_STORE_DIR, { recursive: true });
+    await fs.writeFile(pinFilePath(pin), JSON.stringify(state, null, 2), "utf-8");
+    res.json({ ok: true });
+  } catch (error) {
+    req.log.error({ err: error }, "Failed to sync binder PIN");
+    res.status(500).json({ error: "Could not save your progress right now." });
+  }
+});
+
 export default router;
