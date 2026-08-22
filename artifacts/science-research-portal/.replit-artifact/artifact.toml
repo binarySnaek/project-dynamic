@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Science Research Portal"
+description = "A focused research workspace for Science Olympiad students, combining Gemini-assisted exploration with source capture, notes, and study-ready exports."
+version = "1.0.0"
+id = "artifacts/science-research-portal"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20352
+
+[services.development]
+run = "pnpm --filter @workspace/science-research-portal run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/science-research-portal", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/science-research-portal/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20352"
+BASE_PATH = "/"
