@@ -66,31 +66,42 @@ type SkeletonLine = {
 // the same rule so table-of-contents lines don't pollute the skeleton today.
 const GEMINI_FORMAT_INSTRUCTIONS = `Contents will be in the form of LETTER, LETTER.NUMBER, or LETTER.NUMBER.NUMBER, UNLESS it is in a table of contents, which will ALWAYS be in the form of LETTER0 (e.g. A0, B0). Never treat a LETTER0 line as a real section — it only marks a table-of-contents entry and should be ignored when building the outline.`;
 
-const TOC_MARKER_PATTERN = /^[A-Za-z]+0$/;
+//const TOC_MARKER_PATTERN = /^[A-Za-z]+0$/;
 
-function skeletonDepth(code: string): number {
-  const digits = code.replace(/^[A-Za-z]+/, '');
+function skeletonDepth(digits: string): number {
   if (!digits) return 1;
   return 1 + digits.split('.').filter(Boolean).length;
 }
 
 // Pure structure parsing — no AI needed, so this step is instant and never fails.
+// Section codes are a single letter, optionally followed by digits (with dots)
+// for sub-levels: "A", "A1", "A1.1", "A1.1.2". A bare letter with no digits
+// MUST be followed by a period ("A." not just "A ") — otherwise ordinary
+// sentences starting with a capital letter would be misread as headings.
+// Table-of-contents lines are a letter followed by exactly "0" ("A0", "B0",
+// "C0") and are never real sections — they're always skipped.
+const HEADING_PATTERN = /^([A-Z])(?:(\d+(?:\.\d+)*)(\.)?|(\.))\s+(.+)$/;
+
+// Pure structure parsing — no AI needed, so this step is instant and never fails.
 function parseSkeletonLines(rawText: string): SkeletonLine[] {
-  const headingPattern = /^([A-Za-z]+\d*(?:\.\d+)*)\.?\s+(.+)$/;
   const entries: SkeletonLine[] = [];
   let current: SkeletonLine | null = null;
 
   for (const rawLine of rawText.split('\n')) {
     const line = rawLine.trim();
     if (!line) continue;
-    const match = line.match(headingPattern);
-    if (match && TOC_MARKER_PATTERN.test(match[1])) {
-      // Table-of-contents line (e.g. "A0 Rocks") — never a real section, skip entirely.
-      continue;
-    }
+
+    const match = line.match(HEADING_PATTERN);
     if (match) {
+      const letter = match[1];
+      const digits = match[2] ?? '';
+      const title = match[5].trim();
+
+      // Table-of-contents entry (e.g. "A0 Rocks and Minerals ..... 4") — skip.
+      if (digits === '0') continue;
+
       if (current) entries.push(current);
-      current = { code: match[1], title: match[2].trim(), depth: skeletonDepth(match[1]), body: '' };
+      current = { code: `${letter}${digits}`, title, depth: skeletonDepth(digits), body: '' };
     } else if (current) {
       current.body = current.body ? `${current.body} ${line}` : line;
     }
