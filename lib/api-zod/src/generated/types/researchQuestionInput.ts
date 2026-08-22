@@ -5,9 +5,6 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-export interface HealthStatus {
-  status: string;
-}
 
 export interface ResearchQuestionInput {
   /**
@@ -20,13 +17,3 @@ export interface ResearchQuestionInput {
   /** @maxLength 2000 */
   context?: string;
 }
-
-export interface ResearchResponse {
-  answer: string;
-  model: string;
-}
-
-export interface ApiError {
-  error: string;
-}
-

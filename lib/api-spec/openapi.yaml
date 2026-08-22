@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: gemini
+    description: Gemini-assisted research operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /gemini/research:
+    post:
+      operationId: askGeminiResearch
+      tags: [gemini]
+      summary: Ask Gemini a research question
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResearchQuestionInput"
+      responses:
+        "200":
+          description: Research response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResearchResponse"
+        "400":
+          description: Invalid question
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: AI provider error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +65,36 @@ components:
           type: string
       required:
         - status
+    ResearchQuestionInput:
+      type: object
+      properties:
+        question:
+          type: string
+          minLength: 3
+          maxLength: 4000
+        subject:
+          type: string
+          maxLength: 120
+        context:
+          type: string
+          maxLength: 2000
+      required:
+        - question
+    ResearchResponse:
+      type: object
+      properties:
+        answer:
+          type: string
+        model:
+          type: string
+      required:
+        - answer
+        - model
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
 
