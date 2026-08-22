@@ -26,6 +26,23 @@ type TocAnalysis = {
     missing: number;
   };
 };
+type TocEdit = {
+  type: 'add' | 'delete' | 'rename';
+  nodeId: string;
+  newLabel?: string;
+  newChildren?: TocNode[];
+  reason: string;
+};
+
+type TocEditSuggestion = {
+  edits: TocEdit[];
+  summary: string;
+};
+type TocDraft = {
+  nodes: TocNode[];
+  isDraft: boolean;
+  isAnalyzed: boolean;
+};
 const queryClient = new QueryClient();
 const SOURCE_KEY = 'science-research-sources';
 const NOTES_KEY = 'science-research-notes';
@@ -90,7 +107,7 @@ function BinderSetup({ onComplete }: { onComplete: (binder: string, toc: TocAnal
     }
 
     setIsAnalyzing(true);
-    setMessage('🧠 Analyzing your binder structure...');
+    setMessage('🧠 Gemini is analyzing your binder...');
 
     try {
       // ============================================
@@ -99,7 +116,7 @@ function BinderSetup({ onComplete }: { onComplete: (binder: string, toc: TocAnal
       const MAX_CHUNK_SIZE = 8000;
       const binderText = binder.trim();
 
-      // Split into chunks by sections (looking for patterns like "A.", "B.", etc.)
+      // Split into chunks by sections
       const chunkMatches = binderText.match(/([A-Z]\.\s+[^\n]+\n[\s\S]*?)(?=[A-Z]\.\s+|$)/g);
 
       let chunks: string[] = [];
@@ -111,9 +128,9 @@ function BinderSetup({ onComplete }: { onComplete: (binder: string, toc: TocAnal
         }
       }
 
-      setMessage(`📖 Analyzing ${chunks.length} sections of your binder...`);
+      setMessage(`📖 Analyzing ${chunks.length} sections...`);
 
-      // Process each chunk and combine results
+      // Process each chunk
       let allNodes: TocNode[] = [];
       let totalComplete = 0;
       let totalPartial = 0;
@@ -121,40 +138,34 @@ function BinderSetup({ onComplete }: { onComplete: (binder: string, toc: TocAnal
 
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
-        const chunkLabel = chunkMatches ? `Section ${i + 1}` : `Chunk ${i + 1}`;
-        setMessage(`🔍 Analyzing ${chunkLabel}... (${i + 1}/${chunks.length})`);
+        setMessage(`🔍 Analyzing section ${i + 1}/${chunks.length}...`);
 
-        // Simulate API call for each chunk
-        // ⚠️ REPLACE THIS with actual Gemini API call for each chunk
+        // ⚠️ REPLACE THIS with actual Gemini API call
+        // Gemini should:
+        // 1. Read the chunk
+        // 2. Extract section headers
+        // 3. Determine completeness
         await new Promise(resolve => setTimeout(resolve, 800));
 
-        // For demo, generate sample data for each chunk
-        const sampleNodes: TocNode[] = [
+        // Gemini returns the TOC structure for this chunk
+        // For demo, we simulate with empty nodes
+        // In production, Gemini would return real data
+        const geminiNodes: TocNode[] = [
           {
-            id: `chunk-${i}-A`,
-            label: `${String.fromCharCode(65 + i)}. Sample Section ${i + 1}`,
+            id: `section-${i}`,
+            label: `Section ${String.fromCharCode(65 + i)}`,
             level: 'section',
-            status: ['complete', 'partial', 'missing'][i % 3] as 'complete' | 'partial' | 'missing',
-            description: `Content from ${chunkLabel}`,
-            suggestion: i % 2 === 0 ? '' : 'Consider adding more detail here',
-            children: [
-              {
-                id: `chunk-${i}-A1`,
-                label: `${String.fromCharCode(65 + i)}.1. Subsection`,
-                level: 'subsection',
-                status: ['complete', 'partial', 'missing'][(i + 1) % 3] as 'complete' | 'partial' | 'missing',
-                description: 'Example subsection',
-                suggestion: '',
-                children: []
-              }
-            ]
+            status: 'complete',
+            description: `Analyzed by Gemini`,
+            suggestion: '',
+            children: []
           }
         ];
 
-        allNodes = [...allNodes, ...sampleNodes];
-        totalComplete += sampleNodes.filter(n => n.status === 'complete').length;
-        totalPartial += sampleNodes.filter(n => n.status === 'partial').length;
-        totalMissing += sampleNodes.filter(n => n.status === 'missing').length;
+        allNodes = [...allNodes, ...geminiNodes];
+        totalComplete += geminiNodes.filter(n => n.status === 'complete').length;
+        totalPartial += geminiNodes.filter(n => n.status === 'partial').length;
+        totalMissing += geminiNodes.filter(n => n.status === 'missing').length;
       }
 
       // Build final TOC
@@ -177,8 +188,8 @@ function BinderSetup({ onComplete }: { onComplete: (binder: string, toc: TocAnal
       onComplete(binder.trim(), finalToc);
 
     } catch (error) {
-      setMessage('⚠️ Analysis failed. You can continue without TOC analysis.');
-      console.error('TOC analysis error:', error);
+      setMessage('⚠️ Analysis failed. Please try again.');
+      console.error('Analysis error:', error);
       setIsAnalyzing(false);
       window.localStorage.setItem(BINDER_KEY, binder.trim());
       onComplete(binder.trim(), null);
@@ -192,7 +203,7 @@ function BinderSetup({ onComplete }: { onComplete: (binder: string, toc: TocAnal
       <h1>Bring your binder<br /><em>to the table.</em></h1>
       <p className="setup-copy">Before the workspace opens, paste or describe your entire Dynamic Planet binder. Project Dynamic uses this as your map so its suggestions build on what you actually have.</p>
 
-      {/* ===== CREDITS ===== */}
+      {/* Credits */}
       <div style={{
         marginTop: '20px',
         padding: '16px 20px',
@@ -222,7 +233,7 @@ function BinderSetup({ onComplete }: { onComplete: (binder: string, toc: TocAnal
           id="binder-inventory" 
           value={binder} 
           onChange={(event) => { setBinder(event.target.value); setMessage(''); }} 
-          placeholder="List every section, page, diagram, table, vocabulary list, and topic currently in your binder..." 
+          placeholder="Paste your entire binder content here..." 
           data-testid="input-binder-inventory" 
           disabled={isAnalyzing}
         />
@@ -444,6 +455,10 @@ function Home() {
   );
   const [hoveredNode, setHoveredNode] = useState<TocNode | null>(null);
   const [isAnalyzingBinder, setIsAnalyzingBinder] = useState(false);
+  const [tocDraft, setTocDraft] = useState<TocAnalysis | null>(null);
+  const [isSkimming, setIsSkimming] = useState(false);
+  const [isDeepAnalyzing, setIsDeepAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState(0);
   useEffect(() => {
     window.localStorage.setItem(SOURCE_KEY, JSON.stringify(sources));
   }, [sources]);
@@ -614,7 +629,278 @@ function Home() {
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-
+  // Get a completely blank template - just empty sections
+  function getBlankDynamicPlanetToc(): TocNode[] {
+    return [
+      {
+        id: 'A',
+        label: 'A.',
+        level: 'section',
+        status: 'complete',
+        description: 'Click to edit this section',
+        suggestion: '',
+        children: [
+          { 
+            id: 'A.1', 
+            label: 'A.1.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'A.2', 
+            label: 'A.2.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'A.3', 
+            label: 'A.3.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+        ]
+      },
+      {
+        id: 'B',
+        label: 'B.',
+        level: 'section',
+        status: 'complete',
+        description: 'Click to edit this section',
+        suggestion: '',
+        children: [
+          { 
+            id: 'B.1', 
+            label: 'B.1.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'B.2', 
+            label: 'B.2.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'B.3', 
+            label: 'B.3.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+        ]
+      },
+      {
+        id: 'C',
+        label: 'C.',
+        level: 'section',
+        status: 'complete',
+        description: 'Click to edit this section',
+        suggestion: '',
+        children: [
+          { 
+            id: 'C.1', 
+            label: 'C.1.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'C.2', 
+            label: 'C.2.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'C.3', 
+            label: 'C.3.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+        ]
+      },
+      {
+        id: 'D',
+        label: 'D.',
+        level: 'section',
+        status: 'complete',
+        description: 'Click to edit this section',
+        suggestion: '',
+        children: [
+          { 
+            id: 'D.1', 
+            label: 'D.1.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'D.2', 
+            label: 'D.2.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'D.3', 
+            label: 'D.3.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'D.4', 
+            label: 'D.4.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'D.5', 
+            label: 'D.5.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+        ]
+      },
+      {
+        id: 'E',
+        label: 'E.',
+        level: 'section',
+        status: 'complete',
+        description: 'Click to edit this section',
+        suggestion: '',
+        children: [
+          { 
+            id: 'E.1', 
+            label: 'E.1.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'E.2', 
+            label: 'E.2.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'E.3', 
+            label: 'E.3.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'E.4', 
+            label: 'E.4.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'E.5', 
+            label: 'E.5.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+        ]
+      },
+      {
+        id: 'F',
+        label: 'F.',
+        level: 'section',
+        status: 'complete',
+        description: 'Click to edit this section',
+        suggestion: '',
+        children: [
+          { 
+            id: 'F.1', 
+            label: 'F.1.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'F.2', 
+            label: 'F.2.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'F.3', 
+            label: 'F.3.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+          { 
+            id: 'F.4', 
+            label: 'F.4.', 
+            level: 'subsection', 
+            status: 'complete', 
+            description: 'Click to edit this subsection', 
+            suggestion: '', 
+            children: [] 
+          },
+        ]
+      },
+    ];
+  }
   const handleBinderComplete = (binderContent: string, toc: TocAnalysis | null) => {
     setBinder(binderContent);
     if (toc) {
@@ -871,7 +1157,7 @@ function Home() {
       </main>
 
       {/* NEW: TOC SIDEBAR - appears on the right */}
-      {tocAnalysis && (
+      {(tocAnalysis || tocDraft) && (
         <aside className="toc-sidebar-wrapper" style={{
           padding: '20px 16px',
           borderLeft: '1px solid hsl(var(--border))',
@@ -880,14 +1166,99 @@ function Home() {
           top: 0,
           height: '100vh',
           overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
         }}>
-          <TocSidebar 
-            toc={tocAnalysis} 
-            onNodeHover={setHoveredNode}
-            hoveredNode={hoveredNode}
-          />
+          {/* Show draft status if it's a draft */}
+          {tocDraft && !tocAnalysis && (
+            <div style={{
+              marginBottom: '12px',
+              padding: '12px 16px',
+              background: 'hsl(var(--primary) / 0.08)',
+              borderRadius: '12px',
+              border: '1px solid hsl(var(--primary) / 0.15)',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'hsl(var(--primary))' }}>
+                📋 Draft TOC - Review & Confirm
+              </div>
+              <p style={{ fontSize: '11px', color: 'hsl(var(--muted-foreground))', margin: '4px 0 8px' }}>
+                Gemini skimmed your binder. Check if this looks right, then click confirm for deep analysis.
+              </p>
+              <button 
+                className="primary-button" 
+                style={{ padding: '6px 16px', fontSize: '11px' }}
+                onClick={() => confirmAndAnalyzeDraft()}
+                disabled={isDeepAnalyzing}
+              >
+                {isDeepAnalyzing ? (
+                  <>🔍 Analyzing sections... {analysisProgress}%</>
+                ) : (
+                  <>✅ Confirm & Deep Analyze</>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Show analysis status if deep analyzing */}
+          {isDeepAnalyzing && (
+            <div style={{
+              marginBottom: '12px',
+              padding: '12px 16px',
+              background: 'hsl(var(--primary) / 0.06)',
+              borderRadius: '12px',
+              border: '1px solid hsl(var(--primary) / 0.1)',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 600 }}>
+                🔍 Deep analyzing your binder...
+              </div>
+              <div style={{
+                marginTop: '8px',
+                height: '4px',
+                background: 'hsl(var(--muted))',
+                borderRadius: '99px',
+                overflow: 'hidden',
+              }}>
+                <div style={{
+                  height: '100%',
+                  width: `${analysisProgress}%`,
+                  background: 'hsl(var(--primary))',
+                  borderRadius: '99px',
+                  transition: 'width 0.3s ease',
+                }} />
+              </div>
+              <p style={{ fontSize: '10px', color: 'hsl(var(--muted-foreground))', margin: '4px 0 0' }}>
+                {analysisProgress < 33 && '📖 Reading sections...'}
+                {analysisProgress >= 33 && analysisProgress < 66 && '🧠 Analyzing completeness...'}
+                {analysisProgress >= 66 && analysisProgress < 100 && '📊 Building TOC...'}
+                {analysisProgress >= 100 && '✅ Complete!'}
+              </p>
+            </div>
+          )}
+
+          {/* TOC SIDEBAR - appears on the right */}
+          {tocAnalysis && (
+            <aside className="toc-sidebar-wrapper" style={{
+              padding: '20px 16px',
+              borderLeft: '1px solid hsl(var(--border))',
+              background: 'hsl(var(--background))',
+              position: 'sticky',
+              top: 0,
+              height: '100vh',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }}>
+              <TocSidebar 
+                toc={tocAnalysis} 
+                onNodeHover={setHoveredNode}
+                hoveredNode={hoveredNode}
+              />
+            </aside>
+          )}
         </aside>
-      )}
+      )}sc
     </div>
   );
 }
