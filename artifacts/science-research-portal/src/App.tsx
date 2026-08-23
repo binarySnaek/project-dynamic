@@ -24,6 +24,8 @@ type TocNode = {
   status: 'complete' | 'partial' | 'missing';
   description: string;
   suggestion?: string;
+  missingSubtopics?: string[];  // NEW
+  newSections?: string[];       // NEW
   children: TocNode[];
 };
 
@@ -119,18 +121,85 @@ function parseSkeletonLines(rawText: string): SkeletonLine[] {
   const entries: SkeletonLine[] = [];
   let current: SkeletonLine | null = null;
 
+  // Skip these patterns (they're NOT real sections)
+  const isTOCEntry = (line: string): boolean => {
+    // 1. "Table of Contents" or "CONTENTS" line
+    if (/table\s*of\s*contents/i.test(line) || /^contents$/i.test(line)) {
+      return true;
+    }
+
+    // 2. Lines with dots followed by a page number like "a1.......5a" or "…………….…1a"
+    if (/[\.…]{3,}\s*\d+[a-z]?/.test(line)) {
+      return true;
+    }
+
+    // 3. Lines that are JUST a page number like "1a", "2a", "6b" (no section code)
+    if (/^\s*\d+[a-z]\s*$/.test(line)) {
+      return true;
+    }
+
+    // 4. Lines that start with a LOWERCASE section code
+    //    e.g., "a0. overview……………….…1a" or "a1. stream drainage systems……………….….1a"
+    if (/^[a-z]+\d*\.?\s+/.test(line)) {
+      return true;
+    }
+
+    // 5. Lines that start with a section code but then have dots and a page number
+    //    e.g., "a1. stream drainage systems……………….….1a"
+    if (/^[a-z]+\d*\.?\s+[^\n]+[\.…]{3,}\s*\d+[a-z]?/.test(line)) {
+      return true;
+    }
+
+    return false;
+  };
+
+  // Check if this is a REAL section heading (starts with UPPERCASE)
+  const isRealHeadingLine = (line: string): boolean => {
+    // Must match a section code pattern
+    const match = line.match(CODED_HEADING_PATTERN) || line.match(BARE_LETTER_HEADING_PATTERN);
+    if (!match) return false;
+
+    const code = match[1];
+    const title = match[2].trim();
+
+    // Skip TOC marker pattern (A0, B0) - but note these are UPPERCASE
+    if (TOC_MARKER_PATTERN.test(code)) return false;
+
+    // Skip if it has dots and page number in the title
+    if (/[\.…]{3,}\s*\d+[a-z]?/.test(title)) return false;
+
+    // ============================================
+    // KEY CHANGE: Only keep UPPERCASE sections
+    // ============================================
+    // Check if the first letter of the code is UPPERCASE
+    const firstChar = code.charAt(0);
+    if (firstChar !== firstChar.toUpperCase()) {
+      return false; // Skip lowercase sections (TOC entries)
+    }
+
+    // Must look like a real heading (not too long, not a sentence)
+    return looksLikeRealHeading(title);
+  };
+
   for (const rawLine of rawText.split('\n')) {
     const line = rawLine.trim();
     if (!line) continue;
+
+    // Skip TOC entries
+    if (isTOCEntry(line)) continue;
+
+    // Check if this is a real heading
     const match = line.match(CODED_HEADING_PATTERN) || line.match(BARE_LETTER_HEADING_PATTERN);
-
-    if (match && TOC_MARKER_PATTERN.test(match[1])) continue;
-
-    const isRealHeading = match && looksLikeRealHeading(match[2]);
+    const isRealHeading = match && isRealHeadingLine(line);
 
     if (isRealHeading) {
       if (current) entries.push(current);
-      current = { code: match[1], title: match[2].trim(), depth: skeletonDepth(match[1]), body: '' };
+      current = { 
+        code: match[1], 
+        title: match[2].trim().replace(/[\.…]{3,}.*$/, ''), // Remove dots and page numbers from title
+        depth: skeletonDepth(match[1]), 
+        body: '' 
+      };
     } else if (current) {
       current.body = current.body ? `${current.body} ${line}` : line;
     }
@@ -141,8 +210,8 @@ function parseSkeletonLines(rawText: string): SkeletonLine[] {
 
 function heuristicStatus(body: string): { status: TocNode['status']; note: string } {
   const wordCount = body.trim().split(/\s+/).filter(Boolean).length;
-  if (wordCount === 0) return { status: 'missing', note: 'No content found under this heading yet.' };
-  if (wordCount < 25) return { status: 'partial', note: 'This section is thin — consider adding more detail.' };
+  if (wordCount === 0) return { status: 'missing', note: '(FALLBACK) No content found under this heading yet.' };
+  if (wordCount < 25) return { status: 'partial', note: '(FALLBACK) This section is thin — consider adding more detail.' };
   return { status: 'complete', note: '' };
 }
 
@@ -702,6 +771,7 @@ function TocSidebar({ toc, onNodeHover, hoveredNode, onSectionClick }: {
           </div>
         )}
       </div>
+      
     );
   };
 
@@ -994,8 +1064,12 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
 
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
-    const stored = readStorage<ChatMessage[]>(CHAT_KEY, []);
-    return stored;
+    const stored = readStorage<ChatMessage[]>('project-dynamic-chat', []);
+    // Convert timestamp strings back to Date objects
+    return stored.map(msg => ({
+      ...msg,
+      timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date()
+    }));
   });
   const [isChatThinking, setIsChatThinking] = useState(false);
 
@@ -1109,12 +1183,40 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
     const recentMessages = chatMessages.slice(-8);
     const context = recentMessages.map(m => `${m.role}: ${m.content}`).join('\n');
 
+    // ============================================
+    // FIX: Use skeleton + gap analysis instead of full binder
+    // ============================================
+    // Build a lightweight context from the skeleton and gaps
+    let skeletonContext = '';
+
+    if (skeletonLines.length > 0) {
+      // Only send section titles and codes (no body content)
+      const sectionTitles = skeletonLines.map(line => 
+        `${line.code}: ${line.title}`
+      ).join('\n');
+      skeletonContext = `Binder Structure (sections only, no content):\n${sectionTitles}`;
+    }
+
+    if (gapAnalysis.length > 0) {
+      const gapSummary = gapAnalysis
+        .filter(g => g.status !== 'complete')
+        .map(g => `- ${g.topic}: ${g.suggestion}`)
+        .join('\n');
+      skeletonContext += `\n\nGaps identified:\n${gapSummary}`;
+    }
+
+    // If no skeleton or gaps, send a minimal binder summary
+    if (!skeletonContext && binder.length > 0) {
+      // Just send the first 500 characters as a preview
+      skeletonContext = `Binder preview (first 500 chars):\n${binder.slice(0, 500)}...`;
+    }
+
     askResearch.mutate(
       {
         data: {
           question: message,
           ...(subject ? { subject } : {}),
-          binderContext: binder,
+          binderContext: skeletonContext || 'No binder context available.',
           context: context ? `Previous conversation:\n${context}` : '',
         },
       },
@@ -1131,7 +1233,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
           setIsChatThinking(false);
           setFeedback('Response received');
         },
-        onError: (error) => {
+        onError: (error) => { 
           setChatMessages((prev) => prev.filter(m => m.id !== thinkingId));
           const apiError = error as { error?: string; message?: string };
           const errorMsg: ChatMessage = {
@@ -1198,37 +1300,207 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
     setFeedback(resultMessage);
   };
 
-  const analyzeBinder = () => {
+  const analyzeBinder = async () => {
     setStage('analyzing');
-    setAnalysisMessage('🧠 Matching your notes to each section...');
-    setAnalysisProgress(30);
+    setAnalysisMessage('🧠 Gemini is analyzing each section of your binder...');
+    setAnalysisProgress(10);
 
-    analyzeBinderStructure.mutate(
-      {
-        data: {
-          sections: skeletonLines.map((line) => ({ code: line.code, title: line.title, body: line.body })),
-          formatInstructions: GEMINI_FORMAT_INSTRUCTIONS,
-        },
-      },
-      {
-        onSuccess: (result: BinderStructureAnalysisResult) => {
-          const statuses = new Map(result.sections.map((item) => [item.code, { status: item.status, note: item.note }] as const));
-          finishAnalysis(statuses, '🎉 Binder structure and gaps mapped!');
-        },
-        onError: () => {
-          const statuses = new Map(skeletonLines.map((line) => [line.code, heuristicStatus(line.body)] as const));
-          finishAnalysis(statuses, 'AI analysis unavailable — showing a quick local estimate instead');
-        },
-      },
-    );
-  };
+    try {
+      const totalSections = skeletonLines.length;
 
-  const editSkeleton = () => setEditingBinder(true);
+      if (totalSections === 0) {
+        throw new Error('No sections found in your binder. Please check your binder format.');
+      }
 
-  const handleBinderComplete = (binderContent: string) => {
-    setBinder(binderContent);
-    setEditingBinder(false);
-    skimBinder(binderContent);
+      setAnalysisMessage(`📖 Found ${totalSections} sections to analyze...`);
+      setAnalysisProgress(15);
+
+      const allResults: { 
+        code: string; 
+        status: TocNode['status']; 
+        note: string; 
+        missingSubtopics?: string[]; 
+        newSections?: string[];
+      }[] = [];
+
+      const existingTitles = new Set(skeletonLines.map(line => line.title.toLowerCase()));
+
+      for (let i = 0; i < skeletonLines.length; i++) {
+        const line = skeletonLines[i];
+        const sectionNumber = i + 1;
+        const progress = 15 + Math.floor((i / totalSections) * 70);
+
+        setAnalysisProgress(progress);
+        setAnalysisMessage(`🔍 Analyzing section ${sectionNumber}/${totalSections}: ${line.code} ${line.title}`);
+
+        // ============================================
+        // Build a simple prompt
+        // ============================================
+        const prompt = `
+  Analyze this ONE binder section:
+
+  Section: ${line.code} ${line.title}
+  Content:
+  ${line.body || '(No content yet)'}
+
+  1. Is this COMPLETE, PARTIAL, or MISSING?
+  2. If PARTIAL: List 2-4 specific missing concepts.
+  3. If COMPLETE: What makes it complete?
+  4. What NEW sections should be added?
+
+  Return ONLY valid JSON:
+  {
+    "code": "${line.code}",
+    "status": "complete|partial|missing",
+    "note": "Brief note",
+    "missingSubtopics": ["concept 1", "concept 2"],
+    "newSections": ["New Section Title"]
+  }`;
+
+        try {
+          // ============================================
+          // Try Gemini with better error catching
+          // ============================================
+          let geminiSucceeded = false;
+
+          const result = await new Promise<BinderStructureAnalysisResult>((resolve, reject) => {
+            analyzeBinderStructure.mutate(
+              {
+                sections: [{
+                  code: line.code,
+                  title: line.title,
+                  body: line.body || '',
+                }],
+                formatInstructions: prompt,
+                deepAnalysis: true,
+              },
+              {
+                onSuccess: (data) => {
+                  console.log(`✅ Gemini success for ${line.code}:`, data);
+                  geminiSucceeded = true;
+                  resolve(data);
+                },
+                onError: (error) => {
+                  console.error(`❌ Gemini error for ${line.code}:`, error);
+                  reject(error);
+                },
+              }
+            );
+          });
+
+          // Check if we actually got data back
+          if (result && result.sections && result.sections.length > 0) {
+            const sectionResult = result.sections[0];
+            allResults.push({
+              code: line.code,
+              status: sectionResult.status || 'partial',
+              note: sectionResult.note || 'Analyzed by Gemini',
+              missingSubtopics: (sectionResult as any).missingSubtopics || [],
+              newSections: (sectionResult as any).newSections || [],
+            });
+            console.log(`✅ ${line.code}: ${sectionResult.status}`);
+          } else {
+            console.warn(`⚠️ Gemini returned empty for ${line.code}, using fallback`);
+            const status = heuristicStatus(line.body);
+            allResults.push({
+              code: line.code,
+              status: status.status,
+              note: status.note,
+              missingSubtopics: [],
+              newSections: [],
+            });
+          }
+
+        } catch (sectionError) {
+          console.error(`❌ Section ${line.code} failed:`, sectionError);
+          // Check if it's a 400/413 error
+          const errorMsg = sectionError instanceof Error ? sectionError.message : String(sectionError);
+          if (errorMsg.includes('400') || errorMsg.includes('413')) {
+            console.log(`⚠️ ${line.code}: Server rejected request - ${errorMsg}`);
+          }
+          const status = heuristicStatus(line.body);
+          allResults.push({
+            code: line.code,
+            status: status.status,
+            note: status.note,
+            missingSubtopics: [],
+            newSections: [],
+          });
+        }
+
+        // Small delay between sections
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      // ============================================
+      // Build the final TOC
+      // ============================================
+      setAnalysisMessage('📊 Building your binder TOC...');
+      setAnalysisProgress(90);
+
+      const statuses = new Map(allResults.map((item) => [item.code, { 
+        status: item.status, 
+        note: item.note,
+        missingSubtopics: item.missingSubtopics || [],
+        newSections: item.newSections || []
+      }] as const));
+
+      const allNewSections: string[] = [];
+      const allMissingSubtopics: string[] = [];
+
+      allResults.forEach(item => {
+        if (item.newSections && item.newSections.length > 0) {
+          allNewSections.push(...item.newSections);
+        }
+        if (item.missingSubtopics && item.missingSubtopics.length > 0) {
+          allMissingSubtopics.push(...item.missingSubtopics);
+        }
+      });
+
+      if (allNewSections.length > 0) {
+        const uniqueNewSections = [...new Set(allNewSections)];
+        setTodos((current) => {
+          const existingLabels = new Set(current.map(t => t.label.toLowerCase()));
+          const toAdd = uniqueNewSections
+            .filter(label => label.trim() && !existingLabels.has(label.trim().toLowerCase()))
+            .map(label => ({ 
+              id: `new-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, 
+              label: `🔴 ${label.trim()}`, 
+              done: false 
+            }));
+          return [...current, ...toAdd];
+        });
+        setFeedback(`🧠 Gemini found ${uniqueNewSections.length} NEW sections to add!`);
+      }
+
+      if (allMissingSubtopics.length > 0) {
+        const uniqueMissing = [...new Set(allMissingSubtopics)].slice(0, 15);
+        setTodos((current) => {
+          const existingLabels = new Set(current.map(t => t.label.toLowerCase()));
+          const toAdd = uniqueMissing
+            .filter(label => label.trim() && !existingLabels.has(label.trim().toLowerCase()))
+            .map(label => ({ 
+              id: `missing-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, 
+              label: `🟡 ${label.trim()}`, 
+              done: false 
+            }));
+          return [...current, ...toAdd];
+        });
+      }
+
+      setAnalysisProgress(100);
+      finishAnalysis(statuses, '🎉 Gemini analysis complete! Check your binder plan for new sections.');
+
+    } catch (error) {
+      console.error('Gemini analysis failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setStage('ready');
+      setAnalysisProgress(0);
+      setFeedback(`❌ Gemini analysis failed: ${errorMessage}`);
+      setErrorMessage(`Gemini analysis failed: ${errorMessage}`);
+      setAnalysisMessage(`❌ ${errorMessage}`);
+      throw error;
+    }
   };
 
   // ============================================
@@ -1347,7 +1619,17 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
   // ============================================
   // RENDER: CHECK SETUP STATE
   // ============================================
-
+  // ============================================
+  // HANDLE BINDER COMPLETE
+  // ============================================
+  const handleBinderComplete = (binderContent: string) => {
+    setBinder(binderContent);
+    setEditingBinder(false);
+    skimBinder(binderContent);
+  };
+  const editSkeleton = () => {
+    setEditingBinder(true);
+  };
   if (!binder.trim() || editingBinder) {
     return <BinderSetup onComplete={handleBinderComplete} initialValue={binder} />;
   }
@@ -1499,6 +1781,44 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
           height: 'calc(100vh - 56px)',
           overflowY: 'auto',
         }}>
+          {/* ============================================
+              ERROR DISPLAY - Shows Gemini failures
+              ============================================ */}
+          {errorMessage && (
+            <div style={{
+              background: 'hsl(var(--destructive) / 0.08)',
+              border: '2px solid hsl(var(--destructive))',
+              borderRadius: '16px',
+              padding: '20px 24px',
+              marginBottom: '20px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '12px',
+            }}>
+              <AlertCircle size={24} style={{ color: 'hsl(var(--destructive))', flexShrink: 0, marginTop: '2px' }} />
+              <div>
+                <h4 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 4px 0', color: 'hsl(var(--destructive))' }}>
+                  ❌ Gemini Analysis Failed
+                </h4>
+                <p style={{ fontSize: '12px', color: 'hsl(var(--muted-foreground))', margin: '0', whiteSpace: 'pre-wrap' }}>
+                  {errorMessage}
+                </p>
+                <button 
+                  className="primary-button" 
+                  style={{ marginTop: '12px', fontSize: '12px', padding: '6px 16px' }}
+                  onClick={() => {
+                    setErrorMessage('');
+                    setAnalysisMessage('');
+                    // Reset to review stage so user can try again
+                    setStage('review');
+                    setFeedback('🔄 Ready to try again');
+                  }}
+                >
+                  <RotateCcw size={14} /> Try Again
+                </button>
+              </div>
+            </div>
+          )}
           {/* ============================================
               TAB: RESEARCH
               ============================================ */}

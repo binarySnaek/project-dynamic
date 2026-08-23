@@ -75,8 +75,18 @@ export const analyzeBinderStructureBodyBinderMax = 12000;
 
 
 export const AnalyzeBinderStructureBody = zod.object({
-  "binder": zod.string().min(analyzeBinderStructureBodyBinderMin).max(analyzeBinderStructureBodyBinderMax)
-})
+  "binder": zod.string().min(analyzeBinderStructureBodyBinderMin).max(analyzeBinderStructureBodyBinderMax).optional(),
+  "sections": zod.array(zod.object({
+    "code": zod.string(),
+    "title": zod.string(),
+    "body": zod.string().optional(),
+    "depth": zod.number().optional(),
+  })).optional(),
+  "formatInstructions": zod.string().optional(),
+  "deepAnalysis": zod.boolean().optional(),
+}).refine(data => data.binder || (data.sections && data.sections.length > 0), {
+  message: "Either binder contents or sections must be provided",
+});
 
 
 

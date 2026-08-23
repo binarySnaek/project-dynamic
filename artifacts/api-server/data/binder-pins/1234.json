@@ -1,5 +1,5 @@
 {
-  "binder": "A. streams\nstremas are cool",
+  "binder": "",
   "todos": [
     {
       "id": "earth-structure",
@@ -35,23 +35,5 @@
   "updates": [],
   "sources": [],
   "notes": [],
-  "tocAnalysis": {
-    "nodes": [
-      {
-        "id": "A",
-        "label": "A streams",
-        "level": "section",
-        "status": "partial",
-        "description": "stremas are cool",
-        "suggestion": "This section is thin — consider adding more detail or an example.",
-        "children": []
-      }
-    ],
-    "summary": {
-      "total": 1,
-      "complete": 0,
-      "partial": 1,
-      "missing": 0
-    }
-  }
+  "tocAnalysis": null
 }
