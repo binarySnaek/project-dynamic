@@ -5,8 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { BinderSection } from './binderSection';
+import type { BinderSectionData } from './binderSectionData';
 
 export interface BinderStructureResponse {
-  sections: BinderSection[];
+  sections: BinderSectionData[];
 }

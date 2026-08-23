@@ -64,21 +64,30 @@ export const UpdateGeminiBinderPlanResponse = zod.object({
   "add": zod.array(zod.string()),
   "focus": zod.string()
 })
+
+
 /**
  * @summary Parse a binder into its section structure
  */
 export const analyzeBinderStructureBodyBinderMin = 20;
 export const analyzeBinderStructureBodyBinderMax = 12000;
+
+
+
 export const AnalyzeBinderStructureBody = zod.object({
   "binder": zod.string().min(analyzeBinderStructureBodyBinderMin).max(analyzeBinderStructureBodyBinderMax)
 })
-export const BinderSection = zod.object({
+
+
+
+
+export const AnalyzeBinderStructureResponse = zod.object({
+  "sections": zod.array(zod.object({
   "code": zod.string(),
   "title": zod.string(),
-  "depth": zod.number(),
+  "depth": zod.number().min(1),
   "body": zod.string()
+}))
 })
-export const AnalyzeBinderStructureResponse = zod.object({
-  "sections": zod.array(BinderSection)
-})
+
 

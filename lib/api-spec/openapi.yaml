@@ -213,10 +213,10 @@ components:
         sections:
           type: array
           items:
-            $ref: "#/components/schemas/BinderSection"
+            $ref: "#/components/schemas/BinderSectionData"
       required:
         - sections
-    BinderSection:
+    BinderSectionData:
       type: object
       properties:
         code:
@@ -224,7 +224,7 @@ components:
         title:
           type: string
         depth:
-          type: integer
+          type: number
           minimum: 1
         body:
           type: string

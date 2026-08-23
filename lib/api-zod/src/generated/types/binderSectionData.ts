@@ -5,9 +5,11 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-export interface BinderSection {
+
+export interface BinderSectionData {
   code: string;
   title: string;
+  /** @minimum 1 */
   depth: number;
   body: string;
 }

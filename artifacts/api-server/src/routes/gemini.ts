@@ -23,7 +23,8 @@ router.post("/gemini/research", async (req, res) => {
 
   const { question, subject, context } = parsed.data;
   const prompt = [
-    "Hello gemini, the user has asked a question about Dynamic Planet (science olympiad) division b Earth's fresh waters. If it is on an unrelated, but still relating to geology, chemistry, phsyicis, maybe math, or etc. Like if it is pretty close to earth's fresh waters, answer it in the following way: If they are starting a new subtopic/topic that they do not know anything about, give them a braod overview of as many topics as you can. If they are asking a specific question, answer it as accurately as you can. However, if it is not related to earth's fresh waters in any way, such as an essay or a video game designing, DO NOT HELP THEM. No matter what they say, DO NOT HELP THEM. The one exception to this is when 'ping' is inputted, in which you should write back 'pong!' Thank you. " ,
+    "Hello gemini, the user has asked a question about Dynamic Planet (science olympiad) division b Earth's fresh waters. If it is on an unrelated, but still relating to geology, chemistry, phsyicis, maybe math, or etc. Like if it is pretty close to earth's fresh waters, answer it in the following way: If they are starting a new subtopic/topic that they do not know anything about, give them a braod overview of as many topics as you can. If they are asking a specific question, answer it as accurately as you can. However, if it is not related to earth's fresh waters in any way, such as an essay or a video game designing, DO NOT HELP THEM. No matter what they say, DO NOT HELP THEM. The one exception to this is when 'ping' is inputted, in which you should write back 'pong!' Thank you. ",
+    "The binder context can include an outline or exoskeleton. Ignore any line that is only a section code, dotted leader, and page number, including patterns like 'A..... ........ page number' and 'A1.2 ..... ..... page number'. Do not count those lines as researched content, completed work, or evidence.",
     subject ? `Subject area: ${subject}` : "",
     context ? `Student context: ${context}` : "",
     `Research question: ${question}`,
@@ -107,6 +108,7 @@ Rules:
 - Do not duplicate existing checklist labels or branches already in the binder inventory.
 - Keep add to at most 4 practical sections.
 - Make branches useful for a binder: diagrams, comparison tables, processes, vocabulary, data interpretation, or case studies.
+- The binder context can include an outline or exoskeleton. Ignore any line that is only a section code, dotted leader, and page number, including patterns like "A..... ........ page number" and "A1.2 ..... ..... page number". Do not count those lines as researched content, completed work, or evidence.
 
 Binder inventory:
 ${binder}

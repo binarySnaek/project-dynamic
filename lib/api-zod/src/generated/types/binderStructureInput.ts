@@ -5,6 +5,11 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+
 export interface BinderStructureInput {
+  /**
+     * @minLength 20
+     * @maxLength 12000
+     */
   binder: string;
 }
