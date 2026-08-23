@@ -4,7 +4,7 @@ import {
   AlertCircle, BookOpen, Check, CheckCircle2, Clipboard, ExternalLink, 
   FlaskConical, Info, Link2, ListChecks, NotebookPen, Plus, RotateCcw, 
   Send, Sparkles, Trash2, WandSparkles, MessageSquare, X, ChevronDown,
-  Settings, FileText, Book, Home, ChevronRight, RefreshCw, Save,
+  Settings, FileText, Book, ChevronRight, RefreshCw, Save,
   Download, Upload, Shield, User, Sun, Moon, Palette
 } from 'lucide-react';
 import { useAskGeminiResearch, useUpdateGeminiBinderPlan, useAnalyzeBinderStructure } from '@workspace/api-client-react';
