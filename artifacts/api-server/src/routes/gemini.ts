@@ -188,7 +188,9 @@ SECTION CODES: A real section heading is a single letter, optionally followed by
   - deeper nesting follows the same pattern (A1.1.1, etc.)
 A bare letter with no digits (like "A") is only a heading if followed by a period. Do not treat an ordinary sentence, list item, or paragraph that happens to start with a capital letter as a heading.
 
-TABLE OF CONTENTS: Lines shaped like LETTER0 (A0, B0, C0, ...) are table-of-contents markers, NEVER real sections. Skip them entirely.
+TABLE OF CONTENTS: Do NOR include anything after a table of contents section. If you are in section A. blah, only begin logging after you see A0. You will never see the table of contents as a section.
+
+OUTLINE/EXOSKELETON LINES: Lines that contain only a section code, dotted leader, and page number, such as "A..... ........ page number" or "A1.2 ..... ..... page number", are navigation placeholders. Skip them as binder content and never count them as completed research or evidence.
 
 For each real section heading you find, capture: the code (e.g. "A1.1"), the title text on that heading line, the nesting depth, and all body text that follows it up until the next heading.
 
