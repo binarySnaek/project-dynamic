@@ -1093,6 +1093,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
   const [updates, setUpdates] = useState<BinderUpdate[]>(() => readStorage<BinderUpdate[]>(UPDATES_KEY, []));
 
   // UI state
+  // UI state
   const [feedback, setFeedback] = useState('');
   const [insightFocus, setInsightFocus] = useState('');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
@@ -1103,6 +1104,12 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
   const [updateText, setUpdateText] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [validationMessage, setValidationMessage] = useState('');
+
+  // Color theme state - ADD THIS
+  const [colorTheme, setColorTheme] = useState(() => {
+    const stored = readStorage<string>('project-dynamic-theme', 'blue');
+    return stored;
+  });
 
   // Gemini hooks
   const askResearch = useAskGeminiResearch();
@@ -1125,6 +1132,9 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
     window.localStorage.setItem(SOURCE_KEY, JSON.stringify(sources));
   }, [sources]);
   useEffect(() => {
+    window.localStorage.setItem('project-dynamic-theme', JSON.stringify(colorTheme));
+  }, [colorTheme]);
+  useEffect(() => {
     window.localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
   }, [notes]);
   useEffect(() => {
@@ -1133,6 +1143,13 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
   useEffect(() => {
     window.localStorage.setItem(UPDATES_KEY, JSON.stringify(updates));
   }, [updates]);
+
+  // Apply saved theme on load - ADD THIS
+  useEffect(() => {
+    const savedTheme = readStorage<string>('project-dynamic-theme', 'blue');
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    setColorTheme(savedTheme);
+  }, []);
 
   // PIN sync
   useEffect(() => {
@@ -1734,7 +1751,9 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
           width: '100%',
           paddingTop: '8px',
         }}>
-          <span style={{ fontFamily: 'monospace', letterSpacing: '1px' }}>PIN {pin}</span>
+          <span style={{ fontFamily: 'monospace', letterSpacing: '1px' }}>
+            PIN {pin.slice(0, 2) + '•'.repeat(Math.max(pin.length - 2, 0))}
+          </span>
         </div>
       </aside>
 
@@ -2155,7 +2174,27 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
                   🔐 PIN
                 </h3>
                 <p style={{ fontSize: '12px', color: 'hsl(var(--muted-foreground))', marginBottom: '12px' }}>
-                  Your current PIN: <strong style={{ fontFamily: 'monospace', letterSpacing: '2px' }}>{pin}</strong>
+                  Your current PIN: <strong style={{ fontFamily: 'monospace', letterSpacing: '2px' }}>
+                    {pin.slice(0, 2) + '•'.repeat(Math.max(pin.length - 2, 0))}
+                  </strong>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(pin);
+                      setFeedback('📋 PIN copied to clipboard!');
+                    }}
+                    style={{
+                      marginLeft: '8px',
+                      padding: '2px 8px',
+                      fontSize: '10px',
+                      borderRadius: '6px',
+                      border: '1px solid hsl(var(--border))',
+                      background: 'transparent',
+                      color: 'hsl(var(--muted-foreground))',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Copy PIN
+                  </button>
                 </p>
                 <button className="outline-button" onClick={switchPin} style={{ fontSize: '12px' }}>
                   <RotateCcw size={14} /> Switch PIN
@@ -2163,6 +2202,66 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
                 <button className="outline-button" onClick={clearSession} style={{ fontSize: '12px', marginLeft: '8px', borderColor: 'hsl(var(--destructive))' }}>
                   <Trash2 size={14} /> Clear Session
                 </button>
+              </div>
+
+              {/* Color Theme Section */}
+              <div style={{
+                background: 'hsl(var(--card) / 0.5)',
+                borderRadius: '16px',
+                border: '1px solid hsl(var(--card-border))',
+                padding: '20px',
+                marginBottom: '16px',
+              }}>
+                <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '4px' }}>
+                  🎨 Theme Color
+                </h3>
+                <p style={{ fontSize: '12px', color: 'hsl(var(--muted-foreground))', marginBottom: '12px' }}>
+                  Choose your favorite color for the app
+                </p>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {[
+                    { name: 'Blue', value: 'blue', color: '#3b82f6' },
+                    { name: 'Purple', value: 'purple', color: '#8b5cf6' },
+                    { name: 'Green', value: 'green', color: '#22c55e' },
+                    { name: 'Pink', value: 'pink', color: '#ec4899' },
+                    { name: 'Orange', value: 'orange', color: '#f97316' },
+                  ].map((theme) => {
+                    // Use the colorTheme state to determine if this theme is active
+                    const isActive = colorTheme === theme.value;
+                    return (
+                      <button
+                        key={theme.value}
+                        onClick={() => {
+                          setColorTheme(theme.value);
+                          document.documentElement.setAttribute('data-theme', theme.value);
+                          setFeedback(`🎨 Theme changed to ${theme.name}!`);
+                        }}
+                        style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '50%',
+                          border: isActive ? '3px solid hsl(var(--foreground))' : '2px solid hsl(var(--border))',
+                          background: theme.color,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          transform: isActive ? 'scale(1.1)' : 'scale(1)',
+                          boxShadow: isActive ? `0 0 20px ${theme.color}40` : 'none',
+                        }}
+                        title={theme.name}
+                      />
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: '8px', fontSize: '10px', color: 'hsl(var(--muted-foreground))' }}>
+                  Current theme: <strong>
+                    {colorTheme === 'blue' && 'Blue'}
+                    {colorTheme === 'purple' && 'Purple'}
+                    {colorTheme === 'green' && 'Green'}
+                    {colorTheme === 'pink' && 'Pink'}
+                    {colorTheme === 'orange' && 'Orange'}
+                    {!['blue', 'purple', 'green', 'pink', 'orange'].includes(colorTheme) && 'Blue'}
+                  </strong>
+                </div>
               </div>
 
               {/* Binder Section */}

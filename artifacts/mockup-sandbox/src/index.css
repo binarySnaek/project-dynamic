@@ -69,98 +69,268 @@
   --text-9xl--line-height: 1;
 }
 
-/* LIGHT MODE - Default theme with placeholder values */
+/* ============================================
+   SINGLE :root - SKY BLUE THEME
+   ============================================ */
 :root {
-  --button-outline: rgba(0,0,0, .10);
-  --badge-outline: rgba(0,0,0, .05);
-  --opaque-button-border-intensity: -8;
+  /* --- Theme Colors (for the color picker) --- */
+  --theme-primary: 204 80% 55%;
+  --theme-primary-hover: 204 80% 45%;
+  --theme-primary-glow: 204 80% 55% / 0.25;
+  --theme-secondary: 204 60% 88%;
+  --theme-accent: 25 85% 60%;
+  --theme-sidebar-accent: 204 50% 32%;
+  --theme-sidebar-primary: 204 80% 70%;
+  --theme-gradient-start: 204 80% 60%;
+  --theme-gradient-end: 204 80% 40%;
+  --theme-card-border: 204 45% 85%;
 
-  --elevate-1: rgba(0,0,0, .03);
-  --elevate-2: rgba(0,0,0, .08);
-
-  --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
-  --card: 0 0% 100%;
-  --card-foreground: 240 10% 3.9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 3.9%;
-  --primary: 240 5.9% 10%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 240 4.8% 95.9%;
-  --secondary-foreground: 240 5.9% 10%;
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
-  --accent: 240 4.8% 95.9%;
-  --accent-foreground: 240 5.9% 10%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
-  --ring: 240 5.9% 10%;
-  --chart-1: 12 76% 61%;
-  --chart-2: 173 58% 39%;
-  --chart-3: 197 37% 24%;
-  --chart-4: 43 74% 66%;
-  --chart-5: 27 87% 67%;
-  --sidebar: 0 0% 98%;
-  --sidebar-foreground: 240 5.3% 26.1%;
-  --sidebar-primary: 240 5.9% 10%;
-  --sidebar-primary-foreground: 0 0% 98%;
-  --sidebar-accent: 240 4.8% 95.9%;
-  --sidebar-accent-foreground: 240 5.9% 10%;
-  --sidebar-border: 220 13% 91%;
-  --sidebar-ring: 240 5.9% 10%;
-
-  --font-sans: 'Inter', sans-serif;
-  --font-serif: Georgia, serif;
-  --font-mono: Menlo, monospace;
-  --radius: .5rem;
-  --spacing: 0.25rem;
-}
-
-/* DARK MODE */
-.dark {
-  --button-outline: rgba(255,255,255, .10);
-  --badge-outline: rgba(255,255,255, .05);
-  --opaque-button-border-intensity: 9;
-
-  --elevate-1: rgba(255,255,255, .04);
-  --elevate-2: rgba(255,255,255, .09);
-
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  --card: 240 10% 3.9%;
-  --card-foreground: 0 0% 98%;
-  --popover: 240 10% 3.9%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 0 0% 98%;
-  --primary-foreground: 240 5.9% 10%;
-  --secondary: 240 3.7% 15.9%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --accent: 240 3.7% 15.9%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --ring: 240 4.9% 83.9%;
-  --chart-1: 220 70% 50%;
+  /* --- Main Colors (Sky Blue) --- */
+  --background: 204 70% 94%;
+  --foreground: 215 40% 20%;
+  --border: 204 50% 82%;
+  --input: 204 40% 78%;
+  --ring: 204 80% 55%;
+  --card: 204 60% 98%;
+  --card-foreground: 215 40% 20%;
+  --card-border: var(--theme-card-border);
+  --popover: 204 60% 98%;
+  --popover-foreground: 215 40% 20%;
+  --popover-border: 204 45% 85%;
+  --primary: var(--theme-primary);
+  --primary-foreground: 210 30% 98%;
+  --secondary: var(--theme-secondary);
+  --secondary-foreground: 215 40% 20%;
+  --muted: 204 35% 90%;
+  --muted-foreground: 215 25% 45%;
+  --accent: var(--theme-accent);
+  --accent-foreground: 210 30% 98%;
+  --destructive: 0 70% 50%;
+  --destructive-foreground: 210 30% 98%;
+  --chart-1: 204 80% 55%;
   --chart-2: 160 60% 45%;
   --chart-3: 30 80% 55%;
   --chart-4: 280 65% 60%;
   --chart-5: 340 75% 55%;
-  --sidebar: 240 5.9% 10%;
-  --sidebar-foreground: 240 4.8% 95.9%;
-  --sidebar-primary: 224.3 76.3% 48%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 240 3.7% 15.9%;
-  --sidebar-accent-foreground: 240 4.8% 95.9%;
-  --sidebar-border: 240 3.7% 15.9%;
-  --sidebar-ring: 240 4.9% 83.9%;
+
+  /* --- Sidebar (Dark Blue) --- */
+  --sidebar: 210 50% 20%;
+  --sidebar-foreground: 204 50% 96%;
+  --sidebar-border: 210 40% 30%;
+  --sidebar-primary: var(--theme-sidebar-primary);
+  --sidebar-primary-foreground: 210 50% 20%;
+  --sidebar-accent: var(--theme-sidebar-accent);
+  --sidebar-accent-foreground: 204 50% 96%;
+  --sidebar-ring: 204 80% 55%;
+
+  /* --- Fonts --- */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-serif: Georgia, serif;
+  --font-mono: Menlo, monospace;
+  --radius: 0.5rem;
+  --spacing: 0.25rem;
+
+  /* --- Misc --- */
+  --button-outline: rgba(0,0,0, .10);
+  --badge-outline: rgba(0,0,0, .05);
+  --opaque-button-border-intensity: -8;
+  --elevate-1: rgba(0,0,0, .03);
+  --elevate-2: rgba(0,0,0, .08);
 }
 
+/* ============================================
+   COLOR THEMES (override the theme variables)
+   ============================================ */
+[data-theme="purple"] {
+  --theme-primary: 270 80% 55%;
+  --theme-primary-hover: 270 80% 45%;
+  --theme-primary-glow: 270 80% 55% / 0.25;
+  --theme-secondary: 270 60% 88%;
+  --theme-accent: 330 85% 60%;
+  --theme-sidebar-accent: 270 50% 32%;
+  --theme-sidebar-primary: 270 80% 70%;
+  --theme-gradient-start: 270 80% 60%;
+  --theme-gradient-end: 270 80% 40%;
+  --theme-card-border: 270 45% 85%;
+}
+
+[data-theme="green"] {
+  --theme-primary: 150 80% 45%;
+  --theme-primary-hover: 150 80% 35%;
+  --theme-primary-glow: 150 80% 45% / 0.25;
+  --theme-secondary: 150 60% 88%;
+  --theme-accent: 40 85% 55%;
+  --theme-sidebar-accent: 150 50% 32%;
+  --theme-sidebar-primary: 150 80% 70%;
+  --theme-gradient-start: 150 80% 50%;
+  --theme-gradient-end: 150 80% 35%;
+  --theme-card-border: 150 45% 85%;
+}
+
+[data-theme="pink"] {
+  --theme-primary: 340 80% 55%;
+  --theme-primary-hover: 340 80% 45%;
+  --theme-primary-glow: 340 80% 55% / 0.25;
+  --theme-secondary: 340 60% 88%;
+  --theme-accent: 20 85% 55%;
+  --theme-sidebar-accent: 340 50% 32%;
+  --theme-sidebar-primary: 340 80% 70%;
+  --theme-gradient-start: 340 80% 60%;
+  --theme-gradient-end: 340 80% 40%;
+  --theme-card-border: 340 45% 85%;
+}
+
+[data-theme="orange"] {
+  --theme-primary: 25 90% 50%;
+  --theme-primary-hover: 25 90% 40%;
+  --theme-primary-glow: 25 90% 50% / 0.25;
+  --theme-secondary: 25 60% 88%;
+  --theme-accent: 340 85% 55%;
+  --theme-sidebar-accent: 25 50% 32%;
+  --theme-sidebar-primary: 25 90% 70%;
+  --theme-gradient-start: 25 90% 55%;
+  --theme-gradient-end: 25 90% 40%;
+  --theme-card-border: 25 45% 85%;
+}
+
+/* ============================================
+   DARK MODE
+   ============================================ */
+.dark {
+  --button-outline: rgba(255,255,255, .10);
+  --badge-outline: rgba(255,255,255, .05);
+  --opaque-button-border-intensity: 9;
+  --elevate-1: rgba(255,255,255, .04);
+  --elevate-2: rgba(255,255,255, .09);
+
+  --background: 210 45% 8%;
+  --foreground: 204 35% 92%;
+  --border: 210 30% 25%;
+  --input: 210 30% 22%;
+  --ring: 204 80% 55%;
+  --card: 210 40% 13%;
+  --card-foreground: 204 35% 92%;
+  --card-border: 210 30% 25%;
+  --popover: 210 40% 13%;
+  --popover-foreground: 204 35% 92%;
+  --popover-border: 210 30% 25%;
+  --primary: var(--theme-primary);
+  --primary-foreground: 210 45% 8%;
+  --secondary: 210 35% 22%;
+  --secondary-foreground: 204 35% 92%;
+  --muted: 210 30% 18%;
+  --muted-foreground: 204 20% 65%;
+  --accent: var(--theme-accent);
+  --accent-foreground: 210 45% 8%;
+  --destructive: 0 65% 50%;
+  --destructive-foreground: 210 45% 8%;
+  --sidebar: 210 45% 6%;
+  --sidebar-foreground: 204 35% 92%;
+  --sidebar-border: 210 35% 18%;
+  --sidebar-primary: var(--theme-sidebar-primary);
+  --sidebar-primary-foreground: 210 45% 6%;
+  --sidebar-accent: var(--theme-sidebar-accent);
+  --sidebar-accent-foreground: 204 35% 92%;
+  --elevate-1: rgba(100, 200, 255, 0.05);
+  --elevate-2: rgba(100, 200, 255, 0.09);
+}
+
+/* ============================================
+   THEME COLOR APPLICATIONS - FIXED
+   ============================================ */
+
+/* Primary Buttons */
+.primary-button {
+  background: hsl(var(--theme-primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
+.primary-button:hover {
+  background: hsl(var(--theme-primary-hover)) !important;
+  box-shadow: 0 6px 24px hsl(var(--theme-primary-glow)) !important;
+}
+
+/* Outline Buttons - use theme color for border on hover */
+.outline-button:hover {
+  border-color: hsl(var(--theme-primary) / 0.5) !important;
+}
+
+/* Insight Button */
+.insight-button {
+  border-color: hsl(var(--theme-primary) / 0.45) !important;
+  background: hsl(var(--theme-primary) / 0.08) !important;
+  color: hsl(var(--theme-primary)) !important;
+}
+.insight-button:hover {
+  background: hsl(var(--theme-primary) / 0.16) !important;
+}
+
+/* TOC Leaf - border color */
+.toc-leaf {
+  border-left-color: hsl(var(--theme-primary)) !important;
+}
+
+/* TOC Parent hover */
+.toc-parent:hover {
+  background: hsl(var(--theme-primary) / 0.04) !important;
+}
+
+/* Nav Logo */
+.nav-logo {
+  background: hsl(var(--theme-primary) / 0.12) !important;
+  color: hsl(var(--theme-primary)) !important;
+}
+
+/* Nav Sidebar active button */
+.nav-sidebar button.active {
+  color: hsl(var(--theme-primary)) !important;
+}
+
+/* Status dot */
+.status-dot {
+  background: hsl(var(--theme-primary)) !important;
+  box-shadow: 0 0 0 4px hsl(var(--theme-primary-glow)) !important;
+}
+
+/* Question card accent line */
+.question-card::before {
+  background: hsl(var(--theme-accent)) !important;
+}
+
+/* Setup mark border */
+.setup-mark {
+  border-color: hsl(var(--theme-sidebar-primary)) !important;
+}
+
+/* Step number color */
+.step-number {
+  color: hsl(var(--theme-accent)) !important;
+}
+
+/* Session count background */
+.session-count {
+  background: hsl(var(--theme-secondary)) !important;
+}
+
+/* Brand mark */
+.brand-mark {
+  border-color: hsl(var(--theme-sidebar-primary)) !important;
+  color: hsl(var(--theme-sidebar-primary)) !important;
+}
+
+/* Sidebar nav items active */
+.nav-item.active {
+  background: hsl(var(--theme-sidebar-accent)) !important;
+  color: hsl(var(--sidebar-foreground)) !important;
+}
+
+/* Sidebar primary text */
+.eyebrow[style*="color: hsl(var(--sidebar-primary))"] {
+  color: hsl(var(--theme-sidebar-primary)) !important;
+}
+
+/* ============================================
+   BASE LAYER
+   ============================================ */
 @layer base {
   * {
     @apply border-border;
@@ -171,15 +341,213 @@
 }
 
 @layer utilities {
-  /* Hide ugly search cancel button in Chrome */
   input[type="search"]::-webkit-search-cancel-button {
     @apply hidden;
   }
 
-  /* Placeholder styling for contentEditable div */
   [contenteditable][data-placeholder]:empty::before {
     content: attr(data-placeholder);
     color: hsl(var(--muted-foreground));
     pointer-events: none;
   }
+}
+
+/* ============================================
+   CHAT STYLES
+   ============================================ */
+.chat-messages::-webkit-scrollbar {
+  width: 4px;
+}
+.chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chat-messages::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.2);
+  border-radius: 99px;
+}
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.3);
+}
+
+.thinking-dot {
+  display: inline-block;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.chat-messages > div {
+  animation: fade-in 0.25s ease both;
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================
+   SETUP SCREEN
+   ============================================ */
+.setup-screen {
+  min-height: 100dvh;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 48px 24px;
+}
+
+.setup-mark {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 28px;
+  border: 1px solid hsl(var(--sidebar-primary));
+  border-radius: 24px 24px 24px 6px;
+  color: hsl(var(--primary));
+  background: hsl(var(--card));
+  box-shadow: 0 10px 30px rgba(40, 150, 220, .08);
+}
+
+.setup-screen h1 {
+  margin: 12px 0 17px;
+  font: 600 clamp(42px, 7vw, 76px)/.97 var(--font-serif);
+  letter-spacing: -.045em;
+}
+
+.setup-screen h1 em {
+  color: hsl(var(--primary));
+  font-style: normal;
+}
+
+.setup-copy {
+  max-width: 590px;
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.setup-form {
+  width: min(100%, 650px);
+  margin-top: 34px;
+  padding: 24px;
+  border: 1px solid hsl(var(--card-border));
+  border-radius: 28px;
+  background: hsl(var(--card) / .9);
+  box-shadow: 0 12px 30px rgba(40, 150, 220, .06);
+}
+
+.setup-form textarea {
+  display: block;
+  width: 100%;
+  min-height: 200px;
+  margin-top: 10px;
+  padding: 13px;
+  resize: vertical;
+  border: 1px solid hsl(var(--input));
+  border-radius: 16px;
+  outline: none;
+  background: hsl(var(--background) / .45);
+  color: hsl(var(--foreground));
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.setup-form textarea:focus {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 4px hsl(var(--ring) / .15);
+}
+
+.setup-message {
+  margin-top: 10px;
+  color: hsl(var(--destructive));
+  font-size: 12px;
+}
+
+.setup-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  max-width: 570px;
+  margin-top: 17px;
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* ============================================
+   OUTLINE BUTTON
+   ============================================ */
+.outline-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: 16px;
+  padding: 9px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background .2s ease, border-color .2s ease;
+}
+.outline-button:hover {
+  background: hsl(var(--muted));
+  border-color: hsl(var(--primary) / .5);
+}
+
+/* ============================================
+   ICON BUTTON
+   ============================================ */
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  color: hsl(var(--muted-foreground));
+  background: transparent;
+  border-radius: 12px;
+  padding: 6px;
+  border: none;
+  cursor: pointer;
+  transition: background .2s ease, color .2s ease;
+}
+.icon-button:hover {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+/* ============================================
+   TOC SIDEBAR
+   ============================================ */
+.toc-sidebar {
+  scrollbar-width: thin;
+}
+.toc-sidebar::-webkit-scrollbar {
+  width: 4px;
+}
+.toc-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.toc-sidebar::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.3);
+  border-radius: 99px;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+@media (max-width: 900px) {
+  .workspace-shell { grid-template-columns: 1fr; }
+  .nav-sidebar { display: none; }
+}
+
+@media (max-width: 560px) {
+  .topbar { height: 64px; padding: 0 18px; }
+  .main-content { padding: 30px 16px 42px; }
+  .setup-screen h1 { font-size: 42px; }
+  .primary-button { width: 100%; }
+  .source-form, .add-todo-form { flex-wrap: wrap; }
 }
