@@ -1,0 +1,57 @@
+{
+  "binder": "A. streams\nstremas are cool",
+  "todos": [
+    {
+      "id": "earth-structure",
+      "label": "Earth structure and composition",
+      "done": false
+    },
+    {
+      "id": "plate-tectonics",
+      "label": "Plate tectonics and boundaries",
+      "done": false
+    },
+    {
+      "id": "minerals-rocks",
+      "label": "Minerals, rocks, and the rock cycle",
+      "done": false
+    },
+    {
+      "id": "surface-processes",
+      "label": "Surface processes and landforms",
+      "done": false
+    },
+    {
+      "id": "hazards",
+      "label": "Geologic hazards and preparedness",
+      "done": false
+    },
+    {
+      "id": "maps",
+      "label": "Maps, models, and data interpretation",
+      "done": false
+    }
+  ],
+  "updates": [],
+  "sources": [],
+  "notes": [],
+  "tocAnalysis": {
+    "nodes": [
+      {
+        "id": "A",
+        "label": "A streams",
+        "level": "section",
+        "status": "partial",
+        "description": "stremas are cool",
+        "suggestion": "This section is thin — consider adding more detail or an example.",
+        "children": []
+      }
+    ],
+    "summary": {
+      "total": 1,
+      "complete": 0,
+      "partial": 1,
+      "missing": 0
+    }
+  }
+}
