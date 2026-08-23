@@ -70,22 +70,21 @@
 }
 
 /* ============================================
-   SINGLE :root - SKY BLUE THEME
+   BASE THEME - Sky Blue (Default)
    ============================================ */
 :root {
-  /* --- Theme Colors (for the color picker) --- */
-  --theme-primary: 204 80% 55%;
-  --theme-primary-hover: 204 80% 45%;
-  --theme-primary-glow: 204 80% 55% / 0.25;
-  --theme-secondary: 204 60% 88%;
-  --theme-accent: 25 85% 60%;
-  --theme-sidebar-accent: 204 50% 32%;
-  --theme-sidebar-primary: 204 80% 70%;
-  --theme-gradient-start: 204 80% 60%;
-  --theme-gradient-end: 204 80% 40%;
-  --theme-card-border: 204 45% 85%;
+  /* Theme Colors */
+  --theme-primary-hue: 204;
+  --theme-primary-sat: 80%;
+  --theme-primary-light: 55%;
+  --theme-accent-hue: 25;
+  --theme-accent-sat: 85%;
+  --theme-accent-light: 60%;
+  --theme-sidebar-hue: 210;
+  --theme-sidebar-sat: 50%;
+  --theme-sidebar-light: 20%;
 
-  /* --- Main Colors (Sky Blue) --- */
+  /* Main Colors */
   --background: 204 70% 94%;
   --foreground: 215 40% 20%;
   --border: 204 50% 82%;
@@ -93,17 +92,17 @@
   --ring: 204 80% 55%;
   --card: 204 60% 98%;
   --card-foreground: 215 40% 20%;
-  --card-border: var(--theme-card-border);
+  --card-border: 204 45% 85%;
   --popover: 204 60% 98%;
   --popover-foreground: 215 40% 20%;
   --popover-border: 204 45% 85%;
-  --primary: var(--theme-primary);
+  --primary: var(--theme-primary-hue) var(--theme-primary-sat) var(--theme-primary-light);
   --primary-foreground: 210 30% 98%;
-  --secondary: var(--theme-secondary);
+  --secondary: 204 60% 88%;
   --secondary-foreground: 215 40% 20%;
   --muted: 204 35% 90%;
   --muted-foreground: 215 25% 45%;
-  --accent: var(--theme-accent);
+  --accent: var(--theme-accent-hue) var(--theme-accent-sat) var(--theme-accent-light);
   --accent-foreground: 210 30% 98%;
   --destructive: 0 70% 50%;
   --destructive-foreground: 210 30% 98%;
@@ -113,24 +112,24 @@
   --chart-4: 280 65% 60%;
   --chart-5: 340 75% 55%;
 
-  /* --- Sidebar (Dark Blue) --- */
-  --sidebar: 210 50% 20%;
+  /* Sidebar */
+  --sidebar: var(--theme-sidebar-hue) var(--theme-sidebar-sat) var(--theme-sidebar-light);
   --sidebar-foreground: 204 50% 96%;
   --sidebar-border: 210 40% 30%;
-  --sidebar-primary: var(--theme-sidebar-primary);
+  --sidebar-primary: var(--theme-primary-hue) calc(var(--theme-primary-sat) + 10%) calc(var(--theme-primary-light) + 15%);
   --sidebar-primary-foreground: 210 50% 20%;
-  --sidebar-accent: var(--theme-sidebar-accent);
+  --sidebar-accent: var(--theme-sidebar-hue) var(--theme-sidebar-sat) calc(var(--theme-sidebar-light) + 12%);
   --sidebar-accent-foreground: 204 50% 96%;
   --sidebar-ring: 204 80% 55%;
 
-  /* --- Fonts --- */
+  /* Fonts */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
   --radius: 0.5rem;
   --spacing: 0.25rem;
 
-  /* --- Misc --- */
+  /* Misc */
   --button-outline: rgba(0,0,0, .10);
   --badge-outline: rgba(0,0,0, .05);
   --opaque-button-border-intensity: -8;
@@ -139,58 +138,54 @@
 }
 
 /* ============================================
-   COLOR THEMES (override the theme variables)
+   COLOR THEMES
    ============================================ */
 [data-theme="purple"] {
-  --theme-primary: 270 80% 55%;
-  --theme-primary-hover: 270 80% 45%;
-  --theme-primary-glow: 270 80% 55% / 0.25;
-  --theme-secondary: 270 60% 88%;
-  --theme-accent: 330 85% 60%;
-  --theme-sidebar-accent: 270 50% 32%;
-  --theme-sidebar-primary: 270 80% 70%;
-  --theme-gradient-start: 270 80% 60%;
-  --theme-gradient-end: 270 80% 40%;
-  --theme-card-border: 270 45% 85%;
+  --theme-primary-hue: 270;
+  --theme-primary-sat: 80%;
+  --theme-primary-light: 55%;
+  --theme-accent-hue: 330;
+  --theme-accent-sat: 85%;
+  --theme-accent-light: 60%;
+  --theme-sidebar-hue: 270;
+  --theme-sidebar-sat: 50%;
+  --theme-sidebar-light: 20%;
 }
 
 [data-theme="green"] {
-  --theme-primary: 150 80% 45%;
-  --theme-primary-hover: 150 80% 35%;
-  --theme-primary-glow: 150 80% 45% / 0.25;
-  --theme-secondary: 150 60% 88%;
-  --theme-accent: 40 85% 55%;
-  --theme-sidebar-accent: 150 50% 32%;
-  --theme-sidebar-primary: 150 80% 70%;
-  --theme-gradient-start: 150 80% 50%;
-  --theme-gradient-end: 150 80% 35%;
-  --theme-card-border: 150 45% 85%;
+  --theme-primary-hue: 150;
+  --theme-primary-sat: 80%;
+  --theme-primary-light: 45%;
+  --theme-accent-hue: 40;
+  --theme-accent-sat: 85%;
+  --theme-accent-light: 55%;
+  --theme-sidebar-hue: 150;
+  --theme-sidebar-sat: 50%;
+  --theme-sidebar-light: 20%;
 }
 
 [data-theme="pink"] {
-  --theme-primary: 340 80% 55%;
-  --theme-primary-hover: 340 80% 45%;
-  --theme-primary-glow: 340 80% 55% / 0.25;
-  --theme-secondary: 340 60% 88%;
-  --theme-accent: 20 85% 55%;
-  --theme-sidebar-accent: 340 50% 32%;
-  --theme-sidebar-primary: 340 80% 70%;
-  --theme-gradient-start: 340 80% 60%;
-  --theme-gradient-end: 340 80% 40%;
-  --theme-card-border: 340 45% 85%;
+  --theme-primary-hue: 340;
+  --theme-primary-sat: 80%;
+  --theme-primary-light: 55%;
+  --theme-accent-hue: 20;
+  --theme-accent-sat: 85%;
+  --theme-accent-light: 55%;
+  --theme-sidebar-hue: 340;
+  --theme-sidebar-sat: 50%;
+  --theme-sidebar-light: 20%;
 }
 
 [data-theme="orange"] {
-  --theme-primary: 25 90% 50%;
-  --theme-primary-hover: 25 90% 40%;
-  --theme-primary-glow: 25 90% 50% / 0.25;
-  --theme-secondary: 25 60% 88%;
-  --theme-accent: 340 85% 55%;
-  --theme-sidebar-accent: 25 50% 32%;
-  --theme-sidebar-primary: 25 90% 70%;
-  --theme-gradient-start: 25 90% 55%;
-  --theme-gradient-end: 25 90% 40%;
-  --theme-card-border: 25 45% 85%;
+  --theme-primary-hue: 25;
+  --theme-primary-sat: 90%;
+  --theme-primary-light: 50%;
+  --theme-accent-hue: 340;
+  --theme-accent-sat: 85%;
+  --theme-accent-light: 55%;
+  --theme-sidebar-hue: 25;
+  --theme-sidebar-sat: 50%;
+  --theme-sidebar-light: 20%;
 }
 
 /* ============================================
@@ -214,118 +209,102 @@
   --popover: 210 40% 13%;
   --popover-foreground: 204 35% 92%;
   --popover-border: 210 30% 25%;
-  --primary: var(--theme-primary);
+  --primary: var(--theme-primary-hue) var(--theme-primary-sat) var(--theme-primary-light);
   --primary-foreground: 210 45% 8%;
   --secondary: 210 35% 22%;
   --secondary-foreground: 204 35% 92%;
   --muted: 210 30% 18%;
   --muted-foreground: 204 20% 65%;
-  --accent: var(--theme-accent);
+  --accent: var(--theme-accent-hue) var(--theme-accent-sat) var(--theme-accent-light);
   --accent-foreground: 210 45% 8%;
   --destructive: 0 65% 50%;
   --destructive-foreground: 210 45% 8%;
   --sidebar: 210 45% 6%;
   --sidebar-foreground: 204 35% 92%;
   --sidebar-border: 210 35% 18%;
-  --sidebar-primary: var(--theme-sidebar-primary);
+  --sidebar-primary: var(--theme-primary-hue) calc(var(--theme-primary-sat) + 10%) calc(var(--theme-primary-light) + 15%);
   --sidebar-primary-foreground: 210 45% 6%;
-  --sidebar-accent: var(--theme-sidebar-accent);
+  --sidebar-accent: var(--theme-sidebar-hue) var(--theme-sidebar-sat) calc(var(--theme-sidebar-light) + 12%);
   --sidebar-accent-foreground: 204 35% 92%;
   --elevate-1: rgba(100, 200, 255, 0.05);
   --elevate-2: rgba(100, 200, 255, 0.09);
 }
 
 /* ============================================
-   THEME COLOR APPLICATIONS - FIXED
+   THEME COLOR APPLICATIONS
    ============================================ */
-
-/* Primary Buttons */
 .primary-button {
-  background: hsl(var(--theme-primary)) !important;
+  background: hsl(var(--primary)) !important;
   color: hsl(var(--primary-foreground)) !important;
 }
 .primary-button:hover {
-  background: hsl(var(--theme-primary-hover)) !important;
-  box-shadow: 0 6px 24px hsl(var(--theme-primary-glow)) !important;
+  background: hsl(var(--theme-primary-hue) var(--theme-primary-sat) calc(var(--theme-primary-light) - 10%)) !important;
+  box-shadow: 0 6px 24px hsl(var(--theme-primary-hue) var(--theme-primary-sat) var(--theme-primary-light) / 0.25) !important;
 }
 
-/* Outline Buttons - use theme color for border on hover */
 .outline-button:hover {
-  border-color: hsl(var(--theme-primary) / 0.5) !important;
+  border-color: hsl(var(--primary)) !important;
 }
 
-/* Insight Button */
 .insight-button {
-  border-color: hsl(var(--theme-primary) / 0.45) !important;
-  background: hsl(var(--theme-primary) / 0.08) !important;
-  color: hsl(var(--theme-primary)) !important;
+  border-color: hsl(var(--primary) / 0.45) !important;
+  background: hsl(var(--primary) / 0.08) !important;
+  color: hsl(var(--primary)) !important;
 }
 .insight-button:hover {
-  background: hsl(var(--theme-primary) / 0.16) !important;
+  background: hsl(var(--primary) / 0.16) !important;
 }
 
-/* TOC Leaf - border color */
 .toc-leaf {
-  border-left-color: hsl(var(--theme-primary)) !important;
+  border-left-color: hsl(var(--primary)) !important;
 }
 
-/* TOC Parent hover */
 .toc-parent:hover {
-  background: hsl(var(--theme-primary) / 0.04) !important;
+  background: hsl(var(--primary) / 0.04) !important;
 }
 
-/* Nav Logo */
 .nav-logo {
-  background: hsl(var(--theme-primary) / 0.12) !important;
-  color: hsl(var(--theme-primary)) !important;
+  background: hsl(var(--primary) / 0.12) !important;
+  color: hsl(var(--primary)) !important;
 }
 
-/* Nav Sidebar active button */
 .nav-sidebar button.active {
-  color: hsl(var(--theme-primary)) !important;
+  color: hsl(var(--primary)) !important;
 }
 
-/* Status dot */
 .status-dot {
-  background: hsl(var(--theme-primary)) !important;
-  box-shadow: 0 0 0 4px hsl(var(--theme-primary-glow)) !important;
+  background: hsl(var(--primary)) !important;
+  box-shadow: 0 0 0 4px hsl(var(--primary) / 0.25) !important;
 }
 
-/* Question card accent line */
 .question-card::before {
-  background: hsl(var(--theme-accent)) !important;
+  background: hsl(var(--accent)) !important;
 }
 
-/* Setup mark border */
 .setup-mark {
-  border-color: hsl(var(--theme-sidebar-primary)) !important;
+  border-color: hsl(var(--sidebar-primary)) !important;
 }
 
-/* Step number color */
 .step-number {
-  color: hsl(var(--theme-accent)) !important;
+  color: hsl(var(--accent)) !important;
 }
 
-/* Session count background */
 .session-count {
-  background: hsl(var(--theme-secondary)) !important;
+  background: hsl(var(--secondary)) !important;
 }
 
-/* Brand mark */
 .brand-mark {
-  border-color: hsl(var(--theme-sidebar-primary)) !important;
-  color: hsl(var(--theme-sidebar-primary)) !important;
+  border-color: hsl(var(--sidebar-primary)) !important;
+  color: hsl(var(--sidebar-primary)) !important;
 }
 
-/* Sidebar nav items active */
 .nav-item.active {
-  background: hsl(var(--theme-sidebar-accent)) !important;
+  background: hsl(var(--sidebar-accent)) !important;
   color: hsl(var(--sidebar-foreground)) !important;
 }
 
-/* Sidebar primary text */
-.eyebrow[style*="color: hsl(var(--sidebar-primary))"] {
-  color: hsl(var(--theme-sidebar-primary)) !important;
+.setup-screen h1 em {
+  color: hsl(var(--primary)) !important;
 }
 
 /* ============================================

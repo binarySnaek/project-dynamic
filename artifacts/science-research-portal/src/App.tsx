@@ -12,7 +12,103 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 import './index.css';
+// ============================================
+// THEME SYSTEM
+// ============================================
 
+type ThemeColors = {
+  primary: string;
+  primaryLight: string;
+  primaryDark: string;
+  primaryGlow: string;
+  accent: string;
+  sidebarPrimary: string;
+  sidebarAccent: string;
+  secondary: string;
+};
+
+const themes: Record<string, ThemeColors> = {
+  blue: {
+    primary: '#3b82f6',
+    primaryLight: '#60a5fa',
+    primaryDark: '#2563eb',
+    primaryGlow: 'rgba(59, 130, 246, 0.25)',
+    accent: '#f97316',
+    sidebarPrimary: '#93c5fd',
+    sidebarAccent: '#1e3a5f',
+    sidebarBg: '#0f1a2e',
+    secondary: '#bfdbfe',
+    background: '#e8f0fe',
+    cardBg: '#f0f7ff',
+    border: '#c5d9f0',
+    text: '#1a2a4a',
+    mutedText: '#5a7a9a',
+  },
+  purple: {
+    primary: '#8b5cf6',
+    primaryLight: '#a78bfa',
+    primaryDark: '#7c3aed',
+    primaryGlow: 'rgba(139, 92, 246, 0.25)',
+    accent: '#ec4899',
+    sidebarPrimary: '#c4b5fd',
+    sidebarAccent: '#2e1065',
+    sidebarBg: '#1a0a2e',
+    secondary: '#ddd6fe',
+    background: '#f0ecf8',
+    cardBg: '#f8f5ff',
+    border: '#d5c8f0',
+    text: '#2a1a4a',
+    mutedText: '#6a5a8a',
+  },
+  green: {
+    primary: '#22c55e',
+    primaryLight: '#4ade80',
+    primaryDark: '#16a34a',
+    primaryGlow: 'rgba(34, 197, 94, 0.25)',
+    accent: '#f59e0b',
+    sidebarPrimary: '#86efac',
+    sidebarAccent: '#14532d',
+    sidebarBg: '#0a1a0e',
+    secondary: '#bbf7d0',
+    background: '#e8f5ec',
+    cardBg: '#f0faf5',
+    border: '#c5e8d0',
+    text: '#1a2a1a',
+    mutedText: '#5a7a5a',
+  },
+  pink: {
+    primary: '#ec4899',
+    primaryLight: '#f472b6',
+    primaryDark: '#db2777',
+    primaryGlow: 'rgba(236, 72, 153, 0.25)',
+    accent: '#f97316',
+    sidebarPrimary: '#f9a8d4',
+    sidebarAccent: '#831843',
+    sidebarBg: '#2a0a1a',
+    secondary: '#fbcfe8',
+    background: '#f8ecf2',
+    cardBg: '#fff5f8',
+    border: '#f0c5d8',
+    text: '#4a1a2a',
+    mutedText: '#8a5a6a',
+  },
+  orange: {
+    primary: '#f97316',
+    primaryLight: '#fb923c',
+    primaryDark: '#ea580c',
+    primaryGlow: 'rgba(249, 115, 22, 0.25)',
+    accent: '#ec4899',
+    sidebarPrimary: '#fdba74',
+    sidebarAccent: '#7c2d12',
+    sidebarBg: '#2a1a0a',
+    secondary: '#fed7aa',
+    background: '#f8f0e8',
+    cardBg: '#fff8f0',
+    border: '#f0d8c5',
+    text: '#4a2a1a',
+    mutedText: '#8a6a5a',
+  },
+};
 // ============================================
 // TYPES
 // ============================================
@@ -675,7 +771,7 @@ function TocSidebar({ toc, onNodeHover, hoveredNode, onSectionClick }: {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'complete': return '#3b82f6';
+      case 'complete': return currentTheme?.primary || '#3b82f6';
       case 'partial': return '#eab308';
       case 'missing': return '#ef4444';
       default: return '#6b7280';
@@ -944,11 +1040,16 @@ function PinLanding({ onUnlock }: { onUnlock: (pin: string) => void }) {
 // ============================================
 // SETUP SCREEN COMPONENTS
 // ============================================
-
-function BinderSetup({ onComplete, initialValue = '' }: { onComplete: (binder: string) => void; initialValue?: string }) {
+function BinderSetup({ onComplete, initialValue = '', theme }: { 
+  onComplete: (binder: string) => void; 
+  initialValue?: string;
+  theme?: ThemeColors;
+}) {
   const [binder, setBinder] = useState(initialValue);
   const [message, setMessage] = useState('');
   const isAnalyzing = false;
+
+  const safeTheme = theme || themes.blue;
 
   const saveBinder = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -961,37 +1062,114 @@ function BinderSetup({ onComplete, initialValue = '' }: { onComplete: (binder: s
   };
 
   return (
-    <div className="setup-screen">
-      <div className="setup-mark"><FlaskConical size={22} /></div>
-      <div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>Project Dynamic / Setup</div>
-      <h1>Bring your binder<br /><em>to the table.</em></h1>
-      <p className="setup-copy">Before the workspace opens, paste or describe your entire Dynamic Planet binder. Project Dynamic uses this as your map so its suggestions build on what you actually have.</p>
-
+    <div style={{
+      minHeight: '100dvh',
+      display: 'grid',
+      alignContent: 'center',
+      justifyItems: 'start',
+      maxWidth: '760px',
+      margin: '0 auto',
+      padding: '48px 24px',
+      background: safeTheme.background || '#e8f0fe',
+      color: safeTheme.text || '#1a2a4a',
+      width: '100%',
+    }}>
+      {/* Setup Mark */}
       <div style={{
-        marginTop: '20px',
+        width: '48px',
+        height: '48px',
+        display: 'grid',
+        placeItems: 'center',
+        marginBottom: '28px',
+        border: `2px solid ${safeTheme.primary}`,
+        borderRadius: '24px 24px 24px 6px',
+        color: safeTheme.primary,
+        background: safeTheme.cardBg || '#f0f7ff',
+        boxShadow: `0 10px 30px ${safeTheme.primary}20`,
+      }}>
+        <FlaskConical size={22} />
+      </div>
+
+      {/* Eyebrow */}
+      <div style={{ 
+        color: safeTheme.primary,
+        fontFamily: 'var(--app-font-mono)',
+        fontSize: '10px',
+        letterSpacing: '0.16em',
+        textTransform: 'uppercase',
+        marginBottom: '4px',
+      }}>Project Dynamic / Setup</div>
+
+      {/* Heading */}
+      <h1 style={{
+        margin: '12px 0 17px',
+        font: '600 clamp(42px, 7vw, 76px)/.97 Georgia, serif',
+        letterSpacing: '-0.045em',
+        color: safeTheme.text || '#1a2a4a',
+        marginTop: '4px',
+        lineHeight: '1.1',
+      }}>
+        Bring your binder<br /><em style={{ color: safeTheme.primary, fontStyle: 'normal' }}>to the table.</em>
+      </h1>
+
+      {/* Description */}
+      <p style={{
+        maxWidth: '590px',
+        margin: '0 0 12px 0',
+        color: safeTheme.mutedText || '#5a7a9a',
+        fontSize: '15px',
+        lineHeight: '1.7',
+      }}>
+        Before the workspace opens, paste or describe your entire Dynamic Planet binder. Project Dynamic uses this as your map so its suggestions build on what you actually have.
+      </p>
+
+      {/* Credits */}
+      <div style={{
+        marginTop: '8px',
+        marginBottom: '12px',
         padding: '16px 20px',
-        background: 'hsl(var(--primary) / 0.06)',
+        background: `${safeTheme.primary}10`,
         borderRadius: '16px',
-        border: '1px solid hsl(var(--primary) / 0.12)',
+        border: `1px solid ${safeTheme.primary}25`,
         width: '100%',
         maxWidth: '650px',
         textAlign: 'center',
       }}>
-        <p style={{ fontSize: '12px', color: 'hsl(var(--muted-foreground))', margin: 0, lineHeight: '1.6' }}>
+        <p style={{ fontSize: '12px', color: safeTheme.mutedText || '#5a7a9a', margin: 0, lineHeight: '1.6' }}>
           Built with 💙 by{' '}
-          <strong style={{ color: 'hsl(var(--primary))' }}>DeepSeek</strong>
+          <strong style={{ color: safeTheme.primary }}>DeepSeek</strong>
           {' '}·{' '}
-          <strong style={{ color: 'hsl(var(--primary))' }}>Agent from Replit</strong>
+          <strong style={{ color: safeTheme.primary }}>Agent from Replit</strong>
           {' '}· and{' '}
-          <strong style={{ color: 'hsl(var(--primary))' }}>you</strong> 🚀
+          <strong style={{ color: safeTheme.primary }}>you</strong> 🚀
         </p>
-        <p style={{ fontSize: '10px', color: 'hsl(var(--muted-foreground) / 0.6)', margin: '4px 0 0' }}>
+        <p style={{ fontSize: '10px', color: `${safeTheme.mutedText || '#5a7a9a'}99`, margin: '4px 0 0' }}>
           Special thanks to the Science Olympiad community
         </p>
       </div>
 
-      <form className="setup-form" onSubmit={saveBinder}>
-        <label className="question-label" htmlFor="binder-inventory">Your complete binder inventory</label>
+      {/* Form */}
+      <form onSubmit={saveBinder} style={{
+        width: 'min(100%, 650px)',
+        marginTop: '8px',
+        padding: '24px',
+        border: `2px solid ${safeTheme.border || '#c5d9f0'}`,
+        borderRadius: '28px',
+        background: safeTheme.cardBg || '#f0f7ff',
+        boxShadow: `0 12px 30px ${safeTheme.primary}15`,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+      }}>
+        <label htmlFor="binder-inventory" style={{
+          color: safeTheme.mutedText || '#5a7a9a',
+          fontSize: '11px',
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          fontFamily: 'var(--app-font-mono)',
+        }}>
+          Your complete binder inventory
+        </label>
         <textarea 
           id="binder-inventory" 
           value={binder} 
@@ -999,13 +1177,88 @@ function BinderSetup({ onComplete, initialValue = '' }: { onComplete: (binder: s
           placeholder="Paste your entire binder content here..." 
           data-testid="input-binder-inventory" 
           disabled={isAnalyzing}
+          style={{
+            display: 'block',
+            width: '100%',
+            minHeight: '200px',
+            padding: '13px',
+            resize: 'vertical',
+            border: `2px solid ${safeTheme.border || '#c5d9f0'}`,
+            borderRadius: '16px',
+            outline: 'none',
+            background: safeTheme.background || '#e8f0fe',
+            color: safeTheme.text || '#1a2a4a',
+            fontSize: '14px',
+            lineHeight: '1.55',
+            fontFamily: 'inherit',
+            boxSizing: 'border-box',
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = safeTheme.primary;
+            e.currentTarget.style.boxShadow = `0 0 0 4px ${safeTheme.primary}25`;
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = safeTheme.border || '#c5d9f0';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
         />
-        {message && <div className="setup-message" role="alert" data-testid="status-binder-setup">{message}</div>}
-        <button className="primary-button" type="submit" disabled={isAnalyzing} data-testid="button-open-project-dynamic">
+        {message && <div style={{
+          marginTop: '4px',
+          color: '#ef4444',
+          fontSize: '12px',
+        }}>{message}</div>}
+
+        {/* Submit Button */}
+        <button 
+          type="submit" 
+          disabled={isAnalyzing} 
+          data-testid="button-open-project-dynamic"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '9px',
+            background: safeTheme.primary,
+            color: '#fff',
+            borderRadius: '16px',
+            padding: '12px 17px',
+            fontSize: '12px',
+            fontWeight: 700,
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease',
+            width: '100%',
+            marginTop: '4px',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = safeTheme.primaryDark;
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = `0 6px 24px ${safeTheme.primary}40`;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = safeTheme.primary;
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
           {isAnalyzing ? '🔍 Analyzing...' : <><BookOpen size={15} /> Open Project Dynamic</>}
         </button>
       </form>
-      <div className="setup-note"><Info size={14} /> Your binder inventory stays in this browser and is sent to Gemini only when you ask for research or plan updates.</div>
+
+      {/* Note */}
+      <div style={{
+        display: 'flex',
+        gap: '8px',
+        alignItems: 'flex-start',
+        maxWidth: '570px',
+        marginTop: '17px',
+        color: safeTheme.mutedText || '#5a7a9a',
+        fontSize: '11px',
+        lineHeight: '1.5',
+      }}>
+        <Info size={14} style={{ color: safeTheme.primary, flexShrink: 0, marginTop: '1px' }} />
+        <span>Your binder inventory stays in this browser and is sent to Gemini only when you ask for research or plan updates.</span>
+      </div>
     </div>
   );
 }
@@ -1110,7 +1363,17 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
     const stored = readStorage<string>('project-dynamic-theme', 'blue');
     return stored;
   });
-
+  // Get the current theme colors
+  const currentTheme = themes[colorTheme] || themes.blue;
+  // Helper to get theme color with opacity
+  const getThemeColor = (color: string, opacity: number = 1) => {
+    if (opacity === 1) return color;
+    // For hex colors, convert to rgba
+    const r = parseInt(color.slice(1, 3), 16);
+    const g = parseInt(color.slice(3, 5), 16);
+    const b = parseInt(color.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+  };
   // Gemini hooks
   const askResearch = useAskGeminiResearch();
   const updateBinderPlan = useUpdateGeminiBinderPlan();
@@ -1648,7 +1911,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
     setEditingBinder(true);
   };
   if (!binder.trim() || editingBinder) {
-    return <BinderSetup onComplete={handleBinderComplete} initialValue={binder} />;
+    return <BinderSetup onComplete={handleBinderComplete} initialValue={binder} theme={currentTheme} />;
   }
 
   if (stage === 'review') {
@@ -1664,135 +1927,135 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
   // ============================================
 
   return (
-    <div className="workspace-shell" style={{
-      display: 'grid',
-      gridTemplateColumns: '56px 1fr',
-      minHeight: '100dvh',
-      background: 'hsl(var(--background))',
-    }}>
-      {/* ============================================
-          SIDEBAR NAVIGATION
-          ============================================ */}
-      <aside className="nav-sidebar" style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        padding: '12px 0',
-        background: 'hsl(var(--sidebar))',
-        borderRight: '1px solid hsl(var(--sidebar-border))',
-        height: '100vh',
-        position: 'sticky',
-        top: 0,
-        overflow: 'hidden',
-        gap: '4px',
-      }}>
-        {/* Logo */}
-        <div className="nav-logo" style={{
-          width: '36px',
-          height: '36px',
-          display: 'grid',
-          placeItems: 'center',
-          marginBottom: '12px',
-          background: 'hsl(var(--primary) / 0.12)',
-          borderRadius: '12px',
-          color: 'hsl(var(--primary))',
-        }}>
-          <FlaskConical size={18} strokeWidth={1.7} />
-        </div>
+            <div className="workspace-shell" style={{
+              display: 'grid',
+              gridTemplateColumns: '56px 1fr',
+              minHeight: '100dvh',
+              background: currentTheme.background || '#e8f0fe',
+            }}>
+            {/* ============================================
+                SIDEBAR NAVIGATION
+                ============================================ */}
+              <aside className="nav-sidebar" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                padding: '12px 0',
+                background: currentTheme.sidebarBg || '#1a1a2e',
+                borderRight: `1px solid ${currentTheme.primary}33`,
+                height: '100vh',
+                position: 'sticky',
+                top: 0,
+                overflow: 'hidden',
+                gap: '4px',
+              }}>
+              {/* Logo - Using theme colors directly */}
+              <div style={{
+                width: '36px',
+                height: '36px',
+                display: 'grid',
+                placeItems: 'center',
+                marginBottom: '12px',
+                background: currentTheme.primary + '20',
+                borderRadius: '12px',
+                color: currentTheme.primary,
+              }}>
+                <FlaskConical size={18} strokeWidth={1.7} />
+              </div>
 
-        {/* Nav Buttons */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, width: '100%', padding: '0 8px' }}>
-          {[
-            { id: 'research', icon: MessageSquare, label: 'Research' },
-            { id: 'binder', icon: Book, label: 'Binder' },
-            { id: 'notes', icon: NotebookPen, label: 'Notes' },
-            { id: 'settings', icon: Settings, label: 'Settings' },
-          ].map((tab) => {
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '8px 4px',
-                  width: '100%',
-                  borderRadius: '10px',
-                  border: 'none',
-                  background: isActive ? 'hsl(var(--sidebar-accent))' : 'transparent',
-                  color: isActive ? 'hsl(var(--sidebar-primary))' : 'hsl(var(--sidebar-foreground) / 0.5)',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  fontSize: '9px',
-                  gap: '2px',
-                  fontWeight: isActive ? 600 : 400,
-                }}
-                title={tab.label}
-              >
-                <tab.icon size={18} strokeWidth={isActive ? 2 : 1.5} />
-                <span style={{ fontSize: '7px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                  {tab.label}
+              {/* Nav Buttons */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, width: '100%', padding: '0 8px' }}>
+                {[
+                  { id: 'research', icon: MessageSquare, label: 'Research' },
+                  { id: 'binder', icon: Book, label: 'Binder' },
+                  { id: 'notes', icon: NotebookPen, label: 'Notes' },
+                  { id: 'settings', icon: Settings, label: 'Settings' },
+                ].map((tab) => {
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '8px 4px',
+                        width: '100%',
+                        borderRadius: '10px',
+                        border: 'none',
+                        background: isActive ? currentTheme.sidebarAccent : 'transparent',
+                        color: isActive ? currentTheme.sidebarPrimary : 'hsl(var(--sidebar-foreground) / 0.5)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        fontSize: '9px',
+                        gap: '2px',
+                        fontWeight: isActive ? 600 : 400,
+                      }}
+                      title={tab.label}
+                    >
+                      <tab.icon size={18} strokeWidth={isActive ? 2 : 1.5} />
+                      <span style={{ fontSize: '7px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                        {tab.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* PIN Display */}
+              <div style={{
+                fontSize: '8px',
+                color: 'hsl(var(--sidebar-foreground) / 0.3)',
+                padding: '4px 0',
+                textAlign: 'center',
+                borderTop: '1px solid hsl(var(--sidebar-border) / 0.3)',
+                width: '100%',
+                paddingTop: '8px',
+              }}>
+                <span style={{ fontFamily: 'monospace', letterSpacing: '1px' }}>
+                  PIN {pin.slice(0, 2) + '•'.repeat(Math.max(pin.length - 2, 0))}
                 </span>
-              </button>
-            );
-          })}
-        </div>
+              </div>
+            </aside>
 
-        {/* PIN Display */}
-        <div style={{
-          fontSize: '8px',
-          color: 'hsl(var(--sidebar-foreground) / 0.3)',
-          padding: '4px 0',
-          textAlign: 'center',
-          borderTop: '1px solid hsl(var(--sidebar-border) / 0.3)',
-          width: '100%',
-          paddingTop: '8px',
-        }}>
-          <span style={{ fontFamily: 'monospace', letterSpacing: '1px' }}>
-            PIN {pin.slice(0, 2) + '•'.repeat(Math.max(pin.length - 2, 0))}
-          </span>
-        </div>
-      </aside>
-
-      {/* ============================================
-          MAIN CONTENT AREA
-          ============================================ */}
-      <main className="main-column" style={{ overflow: 'hidden' }}>
-        {/* Top Bar */}
-        <header className="topbar" style={{
-          height: '56px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 20px',
-          borderBottom: '1px solid hsl(var(--border))',
-          background: 'hsl(var(--card) / 0.6)',
-          backdropFilter: 'blur(12px)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '14px', fontWeight: 600 }}>
-              {activeTab === 'research' && '🔬 Research'}
-              {activeTab === 'binder' && '📖 Binder'}
-              {activeTab === 'notes' && '📝 Notes'}
-              {activeTab === 'settings' && '⚙️ Settings'}
-            </span>
-          </div>
-          <div className="topbar-status" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'hsl(var(--muted-foreground))' }}>
-            <span className="status-dot" style={{
-              display: 'inline-block',
-              width: '6px',
-              height: '6px',
-              borderRadius: '99px',
-              background: syncStatus === 'syncing' ? 'hsl(var(--accent))' : 
-                          syncStatus === 'error' ? 'hsl(var(--destructive))' : 'hsl(var(--primary))',
-            }} />
-            {syncStatus === 'syncing' ? 'Saving...' : 
-             syncStatus === 'error' ? 'Offline' : 'Saved'}
-          </div>
-        </header>
+            {/* ============================================
+                MAIN CONTENT AREA
+                ============================================ */}
+            <main className="main-column" style={{ overflow: 'hidden' }}>
+              {/* Top Bar */}
+                <header className="topbar" style={{
+                  height: '56px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '0 20px',
+                  borderBottom: `1px solid ${currentTheme.border || '#c5d9f0'}`,
+                  background: currentTheme.cardBg || '#f0f7ff',
+                  backdropFilter: 'blur(12px)',
+                }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 600 }}>
+                    {activeTab === 'research' && '🔬 Research'}
+                    {activeTab === 'binder' && '📖 Binder'}
+                    {activeTab === 'notes' && '📝 Notes'}
+                    {activeTab === 'settings' && '⚙️ Settings'}
+                  </span>
+                </div>
+                <div className="topbar-status" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'hsl(var(--muted-foreground))' }}>
+                  <span className="status-dot" style={{
+                    display: 'inline-block',
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '99px',
+                    background: syncStatus === 'syncing' ? 'hsl(var(--accent))' : 
+                                syncStatus === 'error' ? 'hsl(var(--destructive))' : currentTheme.primary,
+                  }} />
+                  {syncStatus === 'syncing' ? 'Saving...' : 
+                   syncStatus === 'error' ? 'Offline' : 'Saved'}
+                </div>
+              </header>
 
         {/* Content */}
         <div className="main-content" style={{
@@ -2310,7 +2573,9 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
           )}
         </div>
 
-        {/* Feedback Toast */}
+  {/* ============================================
+            FEEDBACK TOAST with theme color
+            ============================================ */}
         {feedback && (
           <div className="save-toast" role="status" style={{
             position: 'fixed',
@@ -2320,12 +2585,12 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
             background: 'hsl(var(--sidebar))',
             color: 'hsl(var(--sidebar-foreground))',
             borderRadius: '12px',
-            borderLeft: '3px solid hsl(var(--sidebar-primary))',
+            borderLeft: `3px solid ${currentTheme.primary}`,
             fontSize: '12px',
             boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
             zIndex: 100,
           }}>
-            <Check size={14} className="mr-2 inline" style={{ color: 'hsl(var(--primary))' }} />
+            <Check size={14} className="mr-2 inline" style={{ color: currentTheme.primary }} />
             {feedback}
           </div>
         )}
