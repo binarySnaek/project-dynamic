@@ -285,10 +285,10 @@ function renderAnswer(text: string) {
   });
 }
 
-  function BinderSetup({ onComplete, initialValue = '' }: { onComplete: (binder: string) => void; initialValue?: string }) {
-    const [binder, setBinder] = useState(initialValue);
-    const [message, setMessage] = useState('');
-    const isAnalyzing = false;
+function BinderSetup({ onComplete, initialValue = '' }: { onComplete: (binder: string) => void; initialValue?: string }) {
+  const [binder, setBinder] = useState(initialValue);
+  const [message, setMessage] = useState('');
+  const isAnalyzing = false;
 
   const saveBinder = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -352,6 +352,7 @@ function renderAnswer(text: string) {
     </div>
   );
 }
+
 function SkeletonReview({ lines, onApprove, onEdit, isAnalyzing }: { lines: SkeletonLine[]; onApprove: () => void; onEdit: () => void; isAnalyzing: boolean }) {
   return (
     <div className="setup-screen">
@@ -392,6 +393,7 @@ function AnalyzingScreen({ message, progress }: { message: string; progress: num
     </div>
   );
 }
+
 function TocSidebar({ toc, onNodeHover, hoveredNode }: { 
   toc: TocAnalysis; 
   onNodeHover: (node: TocNode | null) => void;
@@ -741,6 +743,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
   const [stage, setStage] = useState<'review' | 'analyzing' | 'ready'>('ready');
   const [editingBinder, setEditingBinder] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
+  const [isResettingBinder, setIsResettingBinder] = useState(false);
   const hasHydratedRef = useRef(true);
 
   useEffect(() => {
@@ -921,7 +924,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
 
   const clearSession = () => {
     if (!window.confirm("Clear your binder, checklist, and notes, and log out of this PIN? (Nothing already saved online under this PIN is touched — entering this PIN again would still have your old data.)")) return;
-    hasHydratedRef.current = true; // about to unmount — don't sync this wipe
+    hasHydratedRef.current = true;
     writeLocalState({});
     onForgetPin();
   };
@@ -929,6 +932,31 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
   const switchPin = () => {
     if (syncStatus === 'syncing' && !window.confirm('Still saving your latest changes — switch PINs anyway?')) return;
     onForgetPin();
+  };
+
+  // ============================================
+  // RESET BINDER - Clear current binder and start fresh
+  // ============================================
+  const resetBinder = () => {
+    if (!window.confirm('Reset your binder? This will clear your current binder, TOC, and analysis. Your checklist, notes, and sources will stay.')) return;
+
+    setIsResettingBinder(true);
+    setFeedback('🔄 Clearing binder...');
+
+    // Clear binder and TOC from localStorage
+    window.localStorage.setItem(BINDER_KEY, JSON.stringify(''));
+    window.localStorage.setItem(TOC_ANALYSIS_KEY, JSON.stringify(null));
+
+    // Reset state
+    setBinder('');
+    setTocAnalysis(null);
+    setGapAnalysis([]);
+    setSkeletonLines([]);
+    setStage('ready');
+    setEditingBinder(true);
+    setIsResettingBinder(false);
+
+    setFeedback('📋 Binder cleared! Paste your new binder below.');
   };
 
   const scrollTo = (id: string) => {
@@ -1068,6 +1096,9 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
             <div className="text-[10px] mb-2" style={{ color: 'rgba(247,239,218,.45)' }}>PIN {pin}</div>
             <button className="nav-item w-full p-0 hover:bg-transparent" onClick={switchPin} data-testid="button-switch-pin">
               <RotateCcw size={14} /> Switch PIN
+            </button>
+            <button className="nav-item w-full p-0 hover:bg-transparent" onClick={resetBinder} disabled={isResettingBinder} data-testid="button-reset-binder">
+              <BookOpen size={14} /> {isResettingBinder ? 'Resetting...' : 'Reset Binder'}
             </button>
             <button className="nav-item w-full p-0 hover:bg-transparent" onClick={clearSession} data-testid="button-clear-session">
               <Trash2 size={14} /> Clear this session
@@ -1287,8 +1318,6 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
           display: 'flex',
           flexDirection: 'column',
         }}>
-          {/* Skeleton Review UI */}
-
           {/* TOC Sidebar Component */}
           {tocAnalysis && (
             <TocSidebar 
