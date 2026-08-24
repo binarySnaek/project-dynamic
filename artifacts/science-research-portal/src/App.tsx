@@ -189,6 +189,9 @@ const CODED_HEADING_PATTERN = /^([A-Za-z]{1,2}\d+(?:\.\d+)*)\.?\s+(.+)$/;
 const BARE_LETTER_HEADING_PATTERN = /^([A-Za-z])\.\s+(.+)$/;
 const MAX_HEADING_WORDS = 14;
 const PIN_PATTERN = /^\d{4,8}$/;
+// Minimum spacing between sequential Gemini calls during binder analysis, so we
+// stay comfortably under free-tier rate limits (roughly 15 requests/minute).
+const GEMINI_REQUEST_DELAY_MS = 5000;
 
 const queryClient = new QueryClient();
 const SOURCE_KEY = 'science-research-sources';
@@ -204,6 +207,14 @@ function skeletonDepth(code: string): number {
   const digits = code.replace(/^[A-Za-z]+/, '');
   if (!digits) return 1;
   return 1 + digits.split('.').filter(Boolean).length;
+}
+
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes === 0) return `${seconds}s`;
+  return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
 }
 
 function looksLikeRealHeading(title: string): boolean {
@@ -771,7 +782,7 @@ function TocSidebar({ toc, onNodeHover, hoveredNode, onSectionClick }: {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'complete': return currentTheme?.primary || '#3b82f6';
+      case 'complete': return '#3b82f6';
       case 'partial': return '#eab308';
       case 'missing': return '#ef4444';
       default: return '#6b7280';
@@ -1592,7 +1603,8 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
         throw new Error('No sections found in your binder. Please check your binder format.');
       }
 
-      setAnalysisMessage(`📖 Found ${totalSections} sections to analyze...`);
+      const initialEstimateMs = totalSections * GEMINI_REQUEST_DELAY_MS;
+      setAnalysisMessage(`📖 Found ${totalSections} sections to analyze — about ${formatDuration(initialEstimateMs)} total...`);
       setAnalysisProgress(15);
 
       const allResults: { 
@@ -1603,15 +1615,28 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
         newSections?: string[];
       }[] = [];
 
-      const existingTitles = new Set(skeletonLines.map(line => line.title.toLowerCase()));
+        const existingTitles = new Set(skeletonLines.map(line => line.title.toLowerCase()));
+        const analysisStartTime = Date.now();
 
-      for (let i = 0; i < skeletonLines.length; i++) {
-        const line = skeletonLines[i];
-        const sectionNumber = i + 1;
-        const progress = 15 + Math.floor((i / totalSections) * 70);
+        for (let i = 0; i < skeletonLines.length; i++) {
+          const line = skeletonLines[i];
+          const sectionNumber = i + 1;
+          const progress = 15 + Math.floor((i / totalSections) * 70);
 
-        setAnalysisProgress(progress);
-        setAnalysisMessage(`🔍 Analyzing section ${sectionNumber}/${totalSections}: ${line.code} ${line.title}`);
+          // Wait before every request except the first, to stay under Gemini's rate
+          // limit. Once we have at least one real measurement, the estimate below
+          // uses actual elapsed time instead of the flat upfront guess.
+          if (i > 0) {
+            const elapsedSoFar = Date.now() - analysisStartTime;
+            const avgPerSection = elapsedSoFar / i;
+            const remainingSections = totalSections - i;
+            const estRemainingMs = Math.round(avgPerSection * remainingSections);
+            setAnalysisMessage(`⏳ Pacing requests for Gemini's rate limit... ~${formatDuration(estRemainingMs)} remaining`);
+            await new Promise(resolve => setTimeout(resolve, GEMINI_REQUEST_DELAY_MS));
+          }
+
+          setAnalysisProgress(progress);
+          setAnalysisMessage(`🔍 Analyzing section ${sectionNumber}/${totalSections}: ${line.code} ${line.title}`);
 
         // ============================================
         // Build a simple prompt
@@ -1646,13 +1671,15 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
           const result = await new Promise<BinderStructureAnalysisResult>((resolve, reject) => {
             analyzeBinderStructure.mutate(
               {
-                sections: [{
-                  code: line.code,
-                  title: line.title,
-                  body: line.body || '',
-                }],
-                formatInstructions: prompt,
-                deepAnalysis: true,
+                data: {
+                  sections: [{
+                    code: line.code,
+                    title: line.title,
+                    body: line.body || '',
+                  }],
+                  formatInstructions: prompt,
+                  deepAnalysis: true,
+                },
               },
               {
                 onSuccess: (data) => {
@@ -1709,7 +1736,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
         }
 
         // Small delay between sections
-        await new Promise(resolve => setTimeout(resolve, 500));
+       // await new Promise(resolve => setTimeout(resolve, 500));
       }
 
       // ============================================

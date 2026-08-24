@@ -260,10 +260,13 @@ Return ONLY valid JSON:
           },
         );
 
-        const responseText = await response.text();
-        console.log(`📥 Gemini response for section ${i+1}:`, response.status);
+          const responseText = await response.text();
+          console.log(`📥 Gemini response for section ${i+1}:`, response.status);
+          if (!response.ok) {
+            console.error(`❌ Gemini error body for section ${i+1}:`, responseText.slice(0, 1000));
+          }
 
-        if (response.ok) {
+          if (response.ok) {
           try {
             const payload = JSON.parse(responseText) as {
               candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
