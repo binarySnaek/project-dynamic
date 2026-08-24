@@ -189,9 +189,12 @@ const CODED_HEADING_PATTERN = /^([A-Za-z]{1,2}\d+(?:\.\d+)*)\.?\s+(.+)$/;
 const BARE_LETTER_HEADING_PATTERN = /^([A-Za-z])\.\s+(.+)$/;
 const MAX_HEADING_WORDS = 14;
 const PIN_PATTERN = /^\d{4,8}$/;
-// Minimum spacing between sequential Gemini calls during binder analysis, so we
+// Minimum spacing between sequential Groq calls during binder analysis, so we
 // stay comfortably under free-tier rate limits (roughly 15 requests/minute).
 const GEMINI_REQUEST_DELAY_MS = 5000;
+// Minimum gap enforced client-side between chat questions, so rapid-fire
+// messages don't immediately trip Groq's per-minute rate limit.
+const CHAT_COOLDOWN_MS = 5000;
 
 const queryClient = new QueryClient();
 const SOURCE_KEY = 'science-research-sources';
@@ -380,6 +383,160 @@ function renderAnswer(text: string) {
   });
 }
 
+// Converts a chunk of markdown (bold, italic, inline code, bullet/numbered
+// lists, and pipe tables) into safe HTML for the chat bubbles, which render
+// via dangerouslySetInnerHTML. Escapes raw text first so nothing in the
+// model's reply (or a pasted binder excerpt) can inject arbitrary HTML.
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function formatInlineMarkdown(text: string): string {
+  // Split on the \u0000-wrapped KaTeX segments so bold/italic/code regexes
+  // never run over already-rendered math HTML.
+  return text
+    .split('\u0000')
+    .map((segment, index) =>
+      index % 2 === 1
+        ? segment // odd indices are rendered LaTeX — pass through untouched
+        : segment
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g, '$1<em>$2</em>')
+            .replace(/`([^`]+)`/g, '<code style="background:hsl(var(--muted));padding:1px 5px;border-radius:4px;font-size:0.92em;">$1</code>'),
+    )
+    .join('');
+}
+
+// KaTeX is loaded globally via a <script> tag in index.html (not an npm
+// import), so it's typed loosely and guarded in case the CDN script hasn't
+// loaded yet.
+declare global {
+  interface Window {
+    katex?: { renderToString: (tex: string, options?: Record<string, unknown>) => string };
+  }
+}
+
+function renderLatex(tex: string, displayMode: boolean): string {
+  if (!window.katex) return escapeHtml(tex); // KaTeX not loaded yet — show raw text instead of crashing.
+  try {
+    return window.katex.renderToString(tex, { displayMode, throwOnError: false });
+  } catch {
+    return escapeHtml(tex);
+  }
+}
+
+// Splits out $$...$$ (block) and $...$ (inline) LaTeX segments, rendering each
+// through KaTeX, and returns the line with math replaced by rendered HTML —
+// everything else is left as-is for formatInlineMarkdown to handle next.
+function extractAndRenderLatex(text: string): string {
+  return text
+    .replace(/\$\$([^$]+?)\$\$/g, (_match, tex) => `\u0000${renderLatex(tex.trim(), true)}\u0000`)
+    .replace(/\$([^$\n]+?)\$/g, (_match, tex) => `\u0000${renderLatex(tex.trim(), false)}\u0000`);
+}
+
+function isTableDivider(line: string): boolean {
+  return /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?$/.test(line.trim());
+}
+
+function parseTableCells(line: string): string[] {
+  const trimmed = line.trim().replace(/^\||\|$/g, '');
+  return trimmed.split('|').map((cell) => cell.trim());
+}
+
+function formatChatMarkdown(rawText: string): string {
+  const lines = extractAndRenderLatex(escapeHtml(rawText)).split('\n');
+  const blocks: string[] = [];
+  let i = 0;
+
+  const HEADER_SIZES: Record<number, string> = { 1: '1.3em', 2: '1.15em', 3: '1.05em', 4: '1em' };
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Blank line — skip, it just separates blocks.
+    if (line.trim() === '') {
+      i++;
+      continue;
+    }
+
+    // Header: #, ##, ###, #### — bigger/bolder text, one line each.
+    // Header: #, ##, ###, #### — bigger/bolder text, one line each.
+    const headerMatch = line.match(/^(#{1,4})\s+(.+)$/);
+    if (headerMatch) {
+      const level = headerMatch[1].length;
+      blocks.push(
+        `<div style="font-size:${HEADER_SIZES[level]};font-weight:700;margin:10px 0 4px;line-height:1.3;">${formatInlineMarkdown(headerMatch[2])}</div>`,
+      );
+      i++;
+      continue;
+    }
+
+    // Horizontal rule: a line that's just ---, ***, or ___ (3+ chars, same symbol).
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
+      blocks.push(`<hr style="border:none;border-top:1px solid hsl(var(--border));margin:10px 0;" />`);
+      i++;
+      continue;
+    }
+
+    // Table: a row of |cells| immediately followed by a |---|---| divider row.
+    if (line.includes('|') && i + 1 < lines.length && isTableDivider(lines[i + 1])) {
+      const headerCells = parseTableCells(line);
+      const rows: string[][] = [];
+      i += 2;
+      while (i < lines.length && lines[i].includes('|') && lines[i].trim() !== '') {
+        rows.push(parseTableCells(lines[i]));
+        i++;
+      }
+      const thead = `<tr>${headerCells.map((c) => `<th style="text-align:left;padding:5px 10px;border-bottom:2px solid hsl(var(--border));white-space:nowrap;">${formatInlineMarkdown(c)}</th>`).join('')}</tr>`;
+      const tbody = rows
+        .map((row) => `<tr>${row.map((c) => `<td style="padding:5px 10px;border-bottom:1px solid hsl(var(--border));">${formatInlineMarkdown(c)}</td>`).join('')}</tr>`)
+        .join('');
+      blocks.push(`<div style="overflow-x:auto;margin:6px 0;"><table style="border-collapse:collapse;font-size:0.95em;width:100%;">${thead}${tbody}</table></div>`);
+      continue;
+    }
+
+    // Bullet list: consecutive lines starting with - or *
+    if (/^[-*]\s+/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^[-*]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^[-*]\s+/, ''));
+        i++;
+      }
+      blocks.push(`<ul style="margin:4px 0;padding-left:20px;">${items.map((item) => `<li>${formatInlineMarkdown(item)}</li>`).join('')}</ul>`);
+      continue;
+    }
+
+    // Numbered list: consecutive lines starting with "1. ", "2. ", etc.
+    if (/^\d+\.\s+/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\d+\.\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\d+\.\s+/, ''));
+        i++;
+      }
+      blocks.push(`<ol style="margin:4px 0;padding-left:20px;">${items.map((item) => `<li>${formatInlineMarkdown(item)}</li>`).join('')}</ol>`);
+      continue;
+    }
+
+    // Otherwise: a plain paragraph line — join consecutive non-blank, non-block
+    // lines together with <br>, so single newlines inside a paragraph still wrap.
+    const paragraphLines: string[] = [];
+      while (
+        i < lines.length &&
+        lines[i].trim() !== '' &&
+        !/^#{1,4}\s+/.test(lines[i]) &&
+        !/^(-{3,}|\*{3,}|_{3,})$/.test(lines[i].trim()) &&
+        !/^[-*]\s+/.test(lines[i]) &&
+        !/^\d+\.\s+/.test(lines[i]) &&
+        !(lines[i].includes('|') && i + 1 < lines.length && isTableDivider(lines[i + 1]))
+      ) {
+      paragraphLines.push(lines[i]);
+      i++;
+    }
+    blocks.push(`<p style="margin:4px 0;">${paragraphLines.map(formatInlineMarkdown).join('<br>')}</p>`);
+  }
+
+  return blocks.join('');
+}
 // ============================================
 // PIN SYSTEM FUNCTIONS
 // ============================================
@@ -443,6 +600,8 @@ function ChatInterface({
 }) {
   const [input, setInput] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -454,13 +613,26 @@ function ChatInterface({
     inputRef.current?.focus();
   }, []);
 
+  // Ticks every 100ms only while a cooldown is actually active, to drive the
+  // progress bar without a timer running constantly in the background.
+  useEffect(() => {
+    if (cooldownUntil <= Date.now()) return;
+    const interval = window.setInterval(() => setNow(Date.now()), 100);
+    return () => window.clearInterval(interval);
+  }, [cooldownUntil]);
+
+  const cooldownRemainingMs = Math.max(0, cooldownUntil - now);
+  const isCoolingDown = cooldownRemainingMs > 0;
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     const trimmed = input.trim();
-    if (!trimmed || isThinking) return;
+    if (!trimmed || isThinking || isCoolingDown) return;
     onSendMessage(trimmed, selectedSubject || undefined);
     setInput('');
     setSelectedSubject('');
+    setCooldownUntil(Date.now() + CHAT_COOLDOWN_MS);
+    setNow(Date.now());
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -628,7 +800,7 @@ function ChatInterface({
                     <span style={{ opacity: 0.7 }}>Thinking...</span>
                   </span>
                 ) : (
-                  <div dangerouslySetInnerHTML={{ __html: msg.content.replace(/\n/g, '<br />') }} />
+                  <div dangerouslySetInnerHTML={{ __html: formatChatMarkdown(msg.content) }} />
                 )}
               </div>
               <div style={{
@@ -638,7 +810,7 @@ function ChatInterface({
                 padding: '0 4px',
                 opacity: 0.5,
               }}>
-                {msg.role === 'user' ? 'You' : 'Gemini'} · {formatTime(msg.timestamp)}
+                {msg.role === 'user' ? 'You' : 'Groq'} · {formatTime(msg.timestamp)}
                 {msg.subject && msg.role === 'user' && ` · ${msg.subject}`}
               </div>
             </div>
@@ -662,7 +834,7 @@ function ChatInterface({
             }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span className="thinking-dot">●</span>
-                <span style={{ opacity: 0.7 }}>Gemini is thinking...</span>
+                <span style={{ opacity: 0.7 }}>Groq is thinking...</span>
               </span>
             </div>
           </div>
@@ -728,29 +900,48 @@ function ChatInterface({
               </select>
             </div>
           </div>
-          <button
-            type="submit"
-            disabled={!input.trim() || isThinking}
+      <button
+        type="submit"
+        disabled={!input.trim() || isThinking || isCoolingDown}
+        style={{
+          padding: '8px 14px',
+          borderRadius: '12px',
+          border: 'none',
+          background: input.trim() && !isThinking && !isCoolingDown ? 'hsl(var(--primary))' : 'hsl(var(--muted))',
+          color: input.trim() && !isThinking && !isCoolingDown ? 'hsl(var(--primary-foreground))' : 'hsl(var(--muted-foreground))',
+          cursor: input.trim() && !isThinking && !isCoolingDown ? 'pointer' : 'default',
+          flexShrink: 0,
+          height: '36px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Send size={14} />
+      </button>
+      </form>
+      {isCoolingDown ? (
+      <div style={{ marginTop: '6px' }}>
+        <div style={{ height: '3px', background: 'hsl(var(--muted))', borderRadius: '99px', overflow: 'hidden' }}>
+          <div
             style={{
-              padding: '8px 14px',
-              borderRadius: '12px',
-              border: 'none',
-              background: input.trim() && !isThinking ? 'hsl(var(--primary))' : 'hsl(var(--muted))',
-              color: input.trim() && !isThinking ? 'hsl(var(--primary-foreground))' : 'hsl(var(--muted-foreground))',
-              cursor: input.trim() && !isThinking ? 'pointer' : 'default',
-              flexShrink: 0,
-              height: '36px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              height: '100%',
+              width: `${(cooldownRemainingMs / CHAT_COOLDOWN_MS) * 100}%`,
+              background: 'hsl(var(--accent))',
+              borderRadius: '99px',
+              transition: 'width 0.1s linear',
             }}
-          >
-            <Send size={14} />
-          </button>
-        </form>
-        <div style={{ fontSize: '8px', color: 'hsl(var(--muted-foreground))', marginTop: '4px', opacity: 0.4, textAlign: 'right' }}>
-          Shift+Enter for new line
+          />
         </div>
+        <div style={{ fontSize: '8px', color: 'hsl(var(--muted-foreground))', marginTop: '3px', opacity: 0.6, textAlign: 'right' }}>
+          Next question in {Math.ceil(cooldownRemainingMs / 1000)}s — pacing for Groq's rate limit
+        </div>
+      </div>
+      ) : (
+      <div style={{ fontSize: '8px', color: 'hsl(var(--muted-foreground))', marginTop: '4px', opacity: 0.4, textAlign: 'right' }}>
+        Shift+Enter for new line
+      </div>
+      )}
       </div>
     </div>
   );
@@ -1268,7 +1459,7 @@ function BinderSetup({ onComplete, initialValue = '', theme }: {
         lineHeight: '1.5',
       }}>
         <Info size={14} style={{ color: safeTheme.primary, flexShrink: 0, marginTop: '1px' }} />
-        <span>Your binder inventory stays in this browser and is sent to Gemini only when you ask for research or plan updates.</span>
+        <span>Your binder inventory stays in this browser and is sent to Groq only when you ask for research or plan updates.</span>
       </div>
     </div>
   );
@@ -1280,7 +1471,7 @@ function SkeletonReview({ lines, onApprove, onEdit, isAnalyzing }: { lines: Skel
       <div className="setup-mark"><FlaskConical size={22} /></div>
       <div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>Project Dynamic / Structure check</div>
       <h1>Does this<br /><em>look right?</em></h1>
-      <p className="setup-copy">This is just the shape of your binder — codes and titles, no content review yet. Confirm it before Gemini reads everything else.</p>
+      <p className="setup-copy">This is just the shape of your binder — codes and titles, no content review yet. Confirm it before Groq reads everything else.</p>
 
       <div style={{ width: '100%', maxWidth: '650px', background: 'hsl(var(--card) / 0.6)', borderRadius: '16px', border: '1px solid hsl(var(--card-border))', padding: '20px 24px', marginTop: '24px', textAlign: 'left' }} data-testid="tree-skeleton-review">
         {lines.map((line) => (
@@ -1307,7 +1498,7 @@ function AnalyzingScreen({ message, progress }: { message: string; progress: num
       <div className="setup-mark"><FlaskConical size={22} /></div>
       <div className="eyebrow" style={{ color: 'hsl(var(--accent))' }}>Project Dynamic / Reading your binder</div>
       <h1>One moment.</h1>
-      <p className="setup-copy">{message || 'Gemini is matching your notes to each section...'}</p>
+      <p className="setup-copy">{message || 'Groq is matching your notes to each section...'}</p>
       <div style={{ width: '100%', maxWidth: '420px', height: '6px', background: 'hsl(var(--muted))', borderRadius: '99px', overflow: 'hidden', marginTop: '20px' }}>
         <div style={{ height: '100%', width: `${progress}%`, background: 'hsl(var(--primary))', borderRadius: '99px', transition: 'width 0.3s ease' }} />
       </div>
@@ -1385,7 +1576,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
     const b = parseInt(color.slice(5, 7), 16);
     return `rgba(${r}, ${g}, ${b}, ${opacity})`;
   };
-  // Gemini hooks
+  // Groq hooks
   const askResearch = useAskGeminiResearch();
   const updateBinderPlan = useUpdateGeminiBinderPlan();
   const analyzeBinderStructure = useAnalyzeBinderStructure();
@@ -1593,7 +1784,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
 
   const analyzeBinder = async () => {
     setStage('analyzing');
-    setAnalysisMessage('🧠 Gemini is analyzing each section of your binder...');
+    setAnalysisMessage('🧠 Groq is analyzing each section of your binder...');
     setAnalysisProgress(10);
 
     try {
@@ -1631,7 +1822,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
             const avgPerSection = elapsedSoFar / i;
             const remainingSections = totalSections - i;
             const estRemainingMs = Math.round(avgPerSection * remainingSections);
-            setAnalysisMessage(`⏳ Pacing requests for Gemini's rate limit... ~${formatDuration(estRemainingMs)} remaining`);
+            setAnalysisMessage(`⏳ Pacing requests for Groq's rate limit... ~${formatDuration(estRemainingMs)} remaining`);
             await new Promise(resolve => setTimeout(resolve, GEMINI_REQUEST_DELAY_MS));
           }
 
@@ -1664,7 +1855,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
 
         try {
           // ============================================
-          // Try Gemini with better error catching
+          // Try Groq with better error catching
           // ============================================
           let geminiSucceeded = false;
 
@@ -1683,12 +1874,12 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
               },
               {
                 onSuccess: (data) => {
-                  console.log(`✅ Gemini success for ${line.code}:`, data);
+                  console.log(`✅ Groq success for ${line.code}:`, data);
                   geminiSucceeded = true;
                   resolve(data);
                 },
                 onError: (error) => {
-                  console.error(`❌ Gemini error for ${line.code}:`, error);
+                  console.error(`❌ Groq error for ${line.code}:`, error);
                   reject(error);
                 },
               }
@@ -1701,13 +1892,13 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
             allResults.push({
               code: line.code,
               status: sectionResult.status || 'partial',
-              note: sectionResult.note || 'Analyzed by Gemini',
+              note: sectionResult.note || 'Analyzed by Groq',
               missingSubtopics: (sectionResult as any).missingSubtopics || [],
               newSections: (sectionResult as any).newSections || [],
             });
             console.log(`✅ ${line.code}: ${sectionResult.status}`);
           } else {
-            console.warn(`⚠️ Gemini returned empty for ${line.code}, using fallback`);
+            console.warn(`⚠️ Groq returned empty for ${line.code}, using fallback`);
             const status = heuristicStatus(line.body);
             allResults.push({
               code: line.code,
@@ -1777,7 +1968,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
             }));
           return [...current, ...toAdd];
         });
-        setFeedback(`🧠 Gemini found ${uniqueNewSections.length} NEW sections to add!`);
+        setFeedback(`🧠 Groq found ${uniqueNewSections.length} NEW sections to add!`);
       }
 
       if (allMissingSubtopics.length > 0) {
@@ -1796,15 +1987,15 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
       }
 
       setAnalysisProgress(100);
-      finishAnalysis(statuses, '🎉 Gemini analysis complete! Check your binder plan for new sections.');
+      finishAnalysis(statuses, '🎉 Groq analysis complete! Check your binder plan for new sections.');
 
     } catch (error) {
-      console.error('Gemini analysis failed:', error);
+      console.error('Groq analysis failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       setStage('ready');
       setAnalysisProgress(0);
-      setFeedback(`❌ Gemini analysis failed: ${errorMessage}`);
-      setErrorMessage(`Gemini analysis failed: ${errorMessage}`);
+      setFeedback(`❌ Groq analysis failed: ${errorMessage}`);
+      setErrorMessage(`Groq analysis failed: ${errorMessage}`);
       setAnalysisMessage(`❌ ${errorMessage}`);
       throw error;
     }
@@ -2091,7 +2282,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
           overflowY: 'auto',
         }}>
           {/* ============================================
-              ERROR DISPLAY - Shows Gemini failures
+              ERROR DISPLAY - Shows Groq failures
               ============================================ */}
           {errorMessage && (
             <div style={{
@@ -2107,7 +2298,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
               <AlertCircle size={24} style={{ color: 'hsl(var(--destructive))', flexShrink: 0, marginTop: '2px' }} />
               <div>
                 <h4 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 4px 0', color: 'hsl(var(--destructive))' }}>
-                  ❌ Gemini Analysis Failed
+                  ❌ Groq Analysis Failed
                 </h4>
                 <p style={{ fontSize: '12px', color: 'hsl(var(--muted-foreground))', margin: '0', whiteSpace: 'pre-wrap' }}>
                   {errorMessage}

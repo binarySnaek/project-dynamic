@@ -22,10 +22,8 @@ export const HealthCheckResponse = zod.object({
  */
 export const askGeminiResearchBodyQuestionMin = 3;
 export const askGeminiResearchBodyQuestionMax = 4000;
-
 export const askGeminiResearchBodySubjectMax = 120;
-
-export const askGeminiResearchBodyContextMax = 2000;
+export const askGeminiResearchBodyContextMax = 6000;
 
 
 

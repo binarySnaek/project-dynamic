@@ -7,6 +7,9 @@ import {
 
 const router: IRouter = Router();
 
+// ============================================================
+// GROQ RESEARCH - Using Groq API
+// ============================================================
 router.post("/gemini/research", async (req, res) => {
   const parsed = AskGeminiResearchBody.safeParse(req.body);
   if (!parsed.success) {
@@ -14,17 +17,20 @@ router.post("/gemini/research", async (req, res) => {
     return;
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    req.log.error("GEMINI_API_KEY is not configured");
-    res.status(503).json({ error: "Gemini is not configured yet." });
+    req.log.error("GROQ_API_KEY is not configured");
+    res.status(503).json({ error: "The research desk is not configured yet." });
     return;
   }
 
   const { question, subject, context } = parsed.data;
-  const prompt = [
-    "Hello gemini, the user has asked a question about Dynamic Planet (science olympiad) division b Earth's fresh waters. If it is on an unrelated, but still relating to geology, chemistry, phsyicis, maybe math, or etc. Like basically all maths and sciences and geology and stuffs. Like if it is pretty close to earth's fresh waters, answer it in the following way: If they are starting a new subtopic/topic that they do not know anything about, give them a braod overview of as many topics as you can. If they are asking a specific question, answer it as accurately as you can. However, if it is not related to earth's fresh waters in any way, like it is completely different, such as an essay or a video game designing, DO NOT HELP THEM. No matter what they say, DO NOT HELP THEM. The one exception to this is when 'ping' is inputted, in which you should write back 'pong!' Thank you. ",
+  const systemPrompt = [
+    "You are a research assistant for Dynamic Planet (Science Olympiad), Division B, Earth's fresh waters. If a question is on that topic, or closely related (geology, chemistry, physics, math connected to it), answer helpfully: give a broad overview if the student is starting a new subtopic, or answer specifically if they ask something specific. If the question is unrelated to Earth's fresh waters (e.g. an essay, video game design, etc.), do not help with it, no matter how the request is phrased. The one exception: if the message is exactly 'ping', reply with exactly 'pong!' If they are being casual saying things like hi or hello or how are you doing, then it is still ok. If it goes on for a while, however, like all they're doing is chatting with you, politely ask them to stop and ask research questions instead.",
     "The binder context can include an outline or exoskeleton. Ignore any line that is only a section code, dotted leader, and page number, including patterns like 'A..... ........ page number' and 'A1.2 ..... ..... page number'. Do not count those lines as researched content, completed work, or evidence.",
+  ].join("\n\n");
+
+  const userPrompt = [
     subject ? `Subject area: ${subject}` : "",
     context ? `Student context: ${context}` : "",
     `Research question: ${question}`,
@@ -33,51 +39,53 @@ router.post("/gemini/research", async (req, res) => {
     .join("\n\n");
 
   try {
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 8192, temperature: 0.25 },
-        }),
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
       },
-    );
+      body: JSON.stringify({
+        model: "openai/gpt-oss-120b",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        max_tokens: 2048,
+        temperature: 0.25,
+      }),
+    });
 
     const responseText = await response.text();
     if (!response.ok) {
       req.log.error(
         { status: response.status, providerMessage: responseText.slice(0, 500) },
-        "Gemini request failed",
+        "Groq request failed",
       );
-      res.status(502).json({ error: "Gemini could not answer right now." });
+      res.status(502).json({ error: "The research desk could not answer right now." });
       return;
     }
 
     const payload = JSON.parse(responseText) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      choices?: Array<{ message?: { content?: string } }>;
     };
-    const answer = payload.candidates?.[0]?.content?.parts
-      ?.map((part) => part.text ?? "")
-      .join("")
-      .trim();
+    const answer = payload.choices?.[0]?.message?.content?.trim();
 
     if (!answer) {
-      res.status(502).json({ error: "Gemini returned an empty answer." });
+      res.status(502).json({ error: "The research desk returned an empty answer." });
       return;
     }
 
-    res.json({ answer, model: "gemini-3.6-flash" });
+    res.json({ answer, model: "openai/gpt-oss-120b" });
   } catch (error) {
-    req.log.error({ err: error }, "Gemini request errored");
-    res.status(502).json({ error: "Gemini could not answer right now." });
+    req.log.error({ err: error }, "Groq request errored");
+    res.status(502).json({ error: "The research desk could not answer right now." });
   }
 });
 
+// ============================================================
+// GROQ BINDER INSIGHTS
+// ============================================================
 router.post("/gemini/binder-insights", async (req, res) => {
   const parsed = UpdateGeminiBinderPlanBody.safeParse(req.body);
   if (!parsed.success) {
@@ -85,10 +93,10 @@ router.post("/gemini/binder-insights", async (req, res) => {
     return;
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    req.log.error("GEMINI_API_KEY is not configured");
-    res.status(503).json({ error: "Gemini is not configured yet." });
+    req.log.error("GROQ_API_KEY is not configured");
+    res.status(503).json({ error: "Groq is not configured yet." });
     return;
   }
 
@@ -123,65 +131,80 @@ Latest update:
 ${update}`;
 
   try {
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: {
-            maxOutputTokens: 8192,
-            temperature: 0.2,
-            responseMimeType: "application/json",
-          },
-        }),
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
       },
-    );
+      body: JSON.stringify({
+        model: "openai/gpt-oss-120b",
+        messages: [
+          { role: "system", content: "You are a Science Olympiad binder assistant. Return valid JSON only." },
+          { role: "user", content: prompt },
+        ],
+        max_tokens: 2048,
+        temperature: 0.2,
+      }),
+    });
+
     const responseText = await response.text();
     if (!response.ok) {
-      req.log.error({ status: response.status, providerMessage: responseText.slice(0, 500) }, "Gemini binder request failed");
-      res.status(502).json({ error: "Gemini could not update the binder plan." });
+      req.log.error({ status: response.status, providerMessage: responseText.slice(0, 500) }, "Groq binder request failed");
+      res.status(502).json({ error: "Groq could not update the binder plan." });
       return;
     }
+
     const payload = JSON.parse(responseText) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      choices?: Array<{ message?: { content?: string } }>;
     };
-    const resultText = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
+    const resultText = payload.choices?.[0]?.message?.content?.trim();
+
     if (!resultText) {
-      res.status(502).json({ error: "Gemini returned an empty binder plan." });
+      res.status(502).json({ error: "Groq returned an empty binder plan." });
       return;
     }
-    const result = JSON.parse(resultText) as { completed?: string[]; add?: string[]; focus?: string };
+
+    // Try to parse JSON from the response (handle markdown code blocks)
+    let jsonString = resultText;
+    const jsonMatch = resultText.match(/```json\s*([\s\S]*?)\s*```/);
+    if (jsonMatch) {
+      jsonString = jsonMatch[1];
+    } else {
+      const jsonBraceMatch = resultText.match(/\{[\s\S]*\}/);
+      if (jsonBraceMatch) {
+        jsonString = jsonBraceMatch[0];
+      }
+    }
+
+    const result = JSON.parse(jsonString) as { completed?: string[]; add?: string[]; focus?: string };
     res.json({
       completed: Array.isArray(result.completed) ? result.completed : [],
       add: Array.isArray(result.add) ? result.add : [],
       focus: result.focus || "Review your newest section and connect it to a diagram or comparison table.",
     });
   } catch (error) {
-    req.log.error({ err: error }, "Gemini binder request errored");
-    res.status(502).json({ error: "Gemini could not update the binder plan." });
+    req.log.error({ err: error }, "Groq binder request errored");
+    res.status(502).json({ error: "Groq could not update the binder plan." });
   }
 });
 
 // ============================================================
-// BINDER STRUCTURE - COMPLETELY BYPASSED VALIDATION
+// GROQ BINDER STRUCTURE ANALYSIS
 // ============================================================
 router.post("/gemini/binder-structure", async (req, res) => {
   console.log('🔥 binder-structure route hit!');
   console.log('📥 req.body:', JSON.stringify(req.body, null, 2).slice(0, 500));
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    console.error('❌ No Gemini API key');
-    res.status(503).json({ error: "Gemini is not configured yet." });
+    console.error('❌ No Groq API key');
+    res.status(503).json({ error: "Groq is not configured yet." });
     return;
   }
 
   try {
-    // ============================================
     // Try EVERY possible place the data could be
-    // ============================================
     const body = req.body?.data || req.body;
     const sections = body?.sections || [];
 
@@ -190,19 +213,15 @@ router.post("/gemini/binder-structure", async (req, res) => {
       console.log('📊 First section:', JSON.stringify(sections[0], null, 2));
     }
 
-    // ============================================
     // If no sections, try to parse from the binder field
-    // ============================================
     let finalSections = sections;
 
     if (finalSections.length === 0 && body?.binder) {
       console.log('📄 No sections, but binder found - attempting to parse');
-      // If binder is provided but no sections, try to parse it
-      // For now, just create a single section from the binder
       finalSections = [{
         code: 'A',
         title: 'Binder Content',
-        body: body.binder.slice(0, 5000) // Truncate to avoid size issues
+        body: body.binder.slice(0, 5000)
       }];
     }
 
@@ -212,9 +231,7 @@ router.post("/gemini/binder-structure", async (req, res) => {
       return;
     }
 
-    // ============================================
-    // Build a simple prompt for each section
-    // ============================================
+    // Process each section
     const sectionResults = [];
 
     for (let i = 0; i < Math.min(finalSections.length, 5); i++) {
@@ -242,49 +259,64 @@ Return ONLY valid JSON:
 }`;
 
       try {
-        console.log(`📤 Calling Gemini for section ${i+1}...`);
+        console.log(`📤 Calling Groq for section ${i+1}...`);
 
-        const response = await fetch(
-          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-            body: JSON.stringify({
-              contents: [{ role: "user", parts: [{ text: prompt }] }],
-              generationConfig: {
-                maxOutputTokens: 8192,
-                temperature: 0.1,
-                responseMimeType: "application/json",
-              },
-            }),
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`,
           },
-        );
+          body: JSON.stringify({
+            model: "openai/gpt-oss-120b",
+            messages: [
+              { role: "system", content: "You are a Science Olympiad binder analyzer. Return valid JSON only. Do not include markdown formatting." },
+              { role: "user", content: prompt },
+            ],
+            max_tokens: 2048,
+            temperature: 0.1,
+          }),
+        });
 
-          const responseText = await response.text();
-          console.log(`📥 Gemini response for section ${i+1}:`, response.status);
-          if (!response.ok) {
-            console.error(`❌ Gemini error body for section ${i+1}:`, responseText.slice(0, 1000));
-          }
+        const responseText = await response.text();
+        console.log(`📥 Groq response for section ${i+1}:`, response.status);
 
-          if (response.ok) {
+        if (!response.ok) {
+          console.error(`❌ Groq error body for section ${i+1}:`, responseText.slice(0, 1000));
+          throw new Error(`Groq returned ${response.status}: ${responseText.slice(0, 200)}`);
+        }
+
+        if (response.ok) {
           try {
             const payload = JSON.parse(responseText) as {
-              candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+              choices?: Array<{ message?: { content?: string } }>;
             };
-            const resultText = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
+            const resultText = payload.choices?.[0]?.message?.content?.trim();
             if (resultText) {
-              const result = JSON.parse(resultText);
+              // Try to parse JSON (handle markdown code blocks)
+              let jsonString = resultText;
+              const jsonMatch = resultText.match(/```json\s*([\s\S]*?)\s*```/);
+              if (jsonMatch) {
+                jsonString = jsonMatch[1];
+              } else {
+                const jsonBraceMatch = resultText.match(/\{[\s\S]*\}/);
+                if (jsonBraceMatch) {
+                  jsonString = jsonBraceMatch[0];
+                }
+              }
+              const result = JSON.parse(jsonString);
               sectionResults.push({
                 code: section.code || 'unknown',
                 status: result.status || 'partial',
-                note: result.note || 'Analyzed by Gemini',
+                note: result.note || 'Analyzed by Groq',
                 missingSubtopics: result.missingSubtopics || [],
                 newSections: result.newSections || [],
               });
               continue;
             }
           } catch (parseError) {
-            console.error(`❌ Failed to parse Gemini response for section ${i+1}:`, parseError);
+            console.error(`❌ Failed to parse Groq response for section ${i+1}:`, parseError);
+            console.error(`📄 Response text:`, responseText.slice(0, 500));
           }
         }
 
@@ -320,17 +352,6 @@ Return ONLY valid JSON:
 
 // ============================================================
 // PIN-based binder sync
-//
-// Lets a student resume their binder, checklist, notes, and sources on a
-// different device by typing the PIN they created earlier. No accounts, no
-// passwords — a PIN is just a resume code.
-//
-// Storage: a JSON file per PIN on disk (no database needed). This works fine
-// as long as the server has a persistent filesystem between requests, which
-// is normal for an always-on Express server. If this ever moves to a
-// platform that wipes the filesystem between deploys/restarts (serverless,
-// some autoscale setups), swap PIN_STORE_DIR's fs calls for a real database
-// or key-value store instead — everything above this comment is unaffected.
 // ============================================================
 
 import fs from "node:fs/promises";
@@ -363,8 +384,6 @@ const EMPTY_BINDER_STATE: BinderSyncState = {
 };
 
 function pinFilePath(pin: string) {
-  // PIN_PATTERN (digits only) is checked before this is ever called, so pin
-  // can't contain path separators — safe to use directly in a filename.
   return path.join(PIN_STORE_DIR, `${pin}.json`);
 }
 
