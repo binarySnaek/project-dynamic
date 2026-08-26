@@ -7,7 +7,7 @@
   ],
   "scripts": {
     "build": "tsc --build",
-    "start": "node dist/lib/db/index.js",
+    "start": "node lib/db/dist/index.js"
     "typecheck": "tsc --noEmit"
   },
   "private": true,
