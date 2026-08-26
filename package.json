@@ -2,12 +2,10 @@
   "name": "workspace",
   "version": "0.0.0",
   "license": "MIT",
-  "workspaces": [
-    "lib/*"
-  ],
+  "workspaces": ["lib/*"],
   "scripts": {
     "build": "tsc --build",
-    "start": "node lib/db/dist/index.js"
+    "start": "node lib/db/dist/index.js",
     "typecheck": "tsc --noEmit"
   },
   "private": true,
