@@ -1,0 +1,389 @@
+{
+  "binder": "A. Stream\nA1. Sediment\nSediment = rock",
+  "todos": [
+    {
+      "id": "new-1787718496001-1npv8",
+      "label": "🔴 Stream Definition",
+      "done": false
+    },
+    {
+      "id": "new-1787718496001-pziks",
+      "label": "🔴 Stream Types",
+      "done": false
+    },
+    {
+      "id": "new-1787718496001-ed8xu",
+      "label": "🔴 Hydrology and Flow Measurements",
+      "done": false
+    },
+    {
+      "id": "new-1787718496001-trmnk",
+      "label": "🔴 Channel Morphology",
+      "done": false
+    },
+    {
+      "id": "new-1787718496001-h3swq",
+      "label": "🔴 Erosion and Sediment Transport",
+      "done": false
+    },
+    {
+      "id": "new-1787718496001-zxk50",
+      "label": "🔴 Stream Ecology and Water Quality",
+      "done": false
+    },
+    {
+      "id": "new-1787718496001-hldq0",
+      "label": "🔴 Definition and Distinction: Sediment vs. Rock",
+      "done": false
+    },
+    {
+      "id": "new-1787718496001-lnufx",
+      "label": "🔴 Types of Sediment",
+      "done": false
+    },
+    {
+      "id": "new-1787718496001-wd7bb",
+      "label": "🔴 Formation Processes: Weathering, Erosion, Transport, Deposition",
+      "done": false
+    },
+    {
+      "id": "new-1787718496001-6u95a",
+      "label": "🔴 Grain‑Size Classification and Sorting",
+      "done": false
+    },
+    {
+      "id": "new-1787718496001-47iu8",
+      "label": "🔴 Sedimentary Structures and Environments",
+      "done": false
+    },
+    {
+      "id": "new-1787718496001-5qdz4",
+      "label": "🔴 Sedimentary Rock Cycle",
+      "done": false
+    },
+    {
+      "id": "new-1787718496001-cco3c",
+      "label": "🔴 Examples and Applications",
+      "done": false
+    },
+    {
+      "id": "missing-1787718496001-lrh8p",
+      "label": "🟡 Definition of a stream",
+      "done": false
+    },
+    {
+      "id": "missing-1787718496001-dej3f",
+      "label": "🟡 Types of streams (perennial, intermittent, ephemeral)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718496001-c2yvh",
+      "label": "🟡 Stream order classification (Strahler, Shreve)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718496001-hsefz",
+      "label": "🟡 Watershed and drainage basin concepts",
+      "done": false
+    },
+    {
+      "id": "missing-1787718496001-qj2c7",
+      "label": "🟡 Flow measurement methods (velocity, discharge, Manning's equation)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718496001-rbd8q",
+      "label": "🟡 Channel morphology (cross‑section, longitudinal profile, meanders)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718496001-mt3mc",
+      "label": "🟡 Erosion and sediment transport principles",
+      "done": false
+    },
+    {
+      "id": "missing-1787718496001-id9j0",
+      "label": "🟡 Stream ecology (aquatic habitats, bioindicators)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718496001-frfaa",
+      "label": "🟡 Water quality parameters (pH, temperature, dissolved oxygen, turbidity)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718496001-yj9xe",
+      "label": "🟡 Relevant equations and calculations (continuity equation, Bernoulli, Manning's n)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718496001-s8772",
+      "label": "🟡 Accurate definition distinguishing sediment from rock",
+      "done": false
+    },
+    {
+      "id": "missing-1787718496001-i5aat",
+      "label": "🟡 Types of sediment (clastic, chemical, organic)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718496001-ebqcp",
+      "label": "🟡 Processes that create sediment (weathering, erosion, transport, deposition)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718496001-8t1d5",
+      "label": "🟡 Grain‑size classification (boulders, cobbles, pebbles, sand, silt, clay)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718496001-4krm0",
+      "label": "🟡 Sedimentary structures (cross‑bedding, ripple marks, graded bedding)",
+      "done": false
+    },
+    {
+      "id": "new-1787718540966-j0lwl",
+      "label": "🔴 Definition and Characteristics of Sediment",
+      "done": false
+    },
+    {
+      "id": "new-1787718540966-j358t",
+      "label": "🔴 Sediment Types and Grain‑Size Classification",
+      "done": false
+    },
+    {
+      "id": "new-1787718540966-jlen9",
+      "label": "🔴 Sediment Transport and Deposition Processes",
+      "done": false
+    },
+    {
+      "id": "new-1787718540966-vbz5z",
+      "label": "🔴 Lithification and the Formation of Sedimentary Rocks",
+      "done": false
+    },
+    {
+      "id": "new-1787718540966-akfug",
+      "label": "🔴 Sedimentary Environments and Examples",
+      "done": false
+    },
+    {
+      "id": "missing-1787718540966-gzjfp",
+      "label": "🟡 Accurate definition of sediment (particles of weathered rock, mineral, or organic material)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718540966-iln2k",
+      "label": "🟡 Clear distinction between sediment and rock (sediment is unconsolidated, rock is lithified)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718540966-1zkg7",
+      "label": "🟡 Types of sediment (clastic, chemical, organic)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718540966-r9r9x",
+      "label": "🟡 Grain‑size classification (boulders, cobbles, pebbles, sand, silt, clay)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718540966-oxt3j",
+      "label": "🟡 Processes of weathering, erosion, transport, and deposition",
+      "done": false
+    },
+    {
+      "id": "missing-1787718540966-7fl3c",
+      "label": "🟡 Sedimentary environments (fluvial, deltaic, marine, aeolian, glacial)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718540966-l7il7",
+      "label": "🟡 Lithification processes (compaction and cementation) that turn sediment into sedimentary rock",
+      "done": false
+    },
+    {
+      "id": "missing-1787718540966-d887x",
+      "label": "🟡 Common examples of sediments (sand, silt, gravel, limestone ooze, peat)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718540966-g4a4k",
+      "label": "🟡 Importance of sediment in the rock cycle and for interpreting Earth's history",
+      "done": false
+    },
+    {
+      "id": "new-1787718668746-yijla",
+      "label": "🔴 Definition and Types of Streams",
+      "done": false
+    },
+    {
+      "id": "new-1787718668746-sg6rr",
+      "label": "🔴 Key Equations (Continuity, Bernoulli, Reynolds)",
+      "done": false
+    },
+    {
+      "id": "new-1787718668746-sovsa",
+      "label": "🔴 Example Problems and Solutions",
+      "done": false
+    },
+    {
+      "id": "new-1787718668746-n8zgt",
+      "label": "🔴 Diagrams and Visual Aids",
+      "done": false
+    },
+    {
+      "id": "new-1787718668746-dcytz",
+      "label": "🔴 Sediment Definition and Distinction from Rock",
+      "done": false
+    },
+    {
+      "id": "new-1787718668746-n5f0g",
+      "label": "🔴 Sediment Formation Processes",
+      "done": false
+    },
+    {
+      "id": "new-1787718668746-kjyo2",
+      "label": "🔴 Sediment Classification and Grain Size",
+      "done": false
+    },
+    {
+      "id": "new-1787718668746-tle73",
+      "label": "🔴 Sedimentary Environments and Structures",
+      "done": false
+    },
+    {
+      "id": "missing-1787718668746-ol44r",
+      "label": "🟡 Definition of a stream and its relevance to fluid dynamics",
+      "done": false
+    },
+    {
+      "id": "missing-1787718668746-s6m4s",
+      "label": "🟡 Classification of streams (laminar vs. turbulent flow)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718668746-y142o",
+      "label": "🟡 Continuity equation and its application to streams",
+      "done": false
+    },
+    {
+      "id": "missing-1787718668746-nvr03",
+      "label": "🟡 Bernoulli's equation and energy considerations for streams",
+      "done": false
+    },
+    {
+      "id": "missing-1787718668746-dfcun",
+      "label": "🟡 Reynolds number calculation and interpretation",
+      "done": false
+    },
+    {
+      "id": "missing-1787718668746-luzpl",
+      "label": "🟡 Flow rate calculations and example problems",
+      "done": false
+    },
+    {
+      "id": "missing-1787718668746-twl4d",
+      "label": "🟡 Stream profile diagrams or visual aids",
+      "done": false
+    },
+    {
+      "id": "missing-1787718668746-vvksf",
+      "label": "🟡 Real‑world applications (e.g., river engineering, pipe flow)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718668746-e618z",
+      "label": "🟡 Sample practice questions and solutions",
+      "done": false
+    },
+    {
+      "id": "missing-1787718668747-cihr0",
+      "label": "🟡 Proper definition of sediment (loose particles, not solid rock)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718668747-ol533",
+      "label": "🟡 Difference between sediment and rock",
+      "done": false
+    },
+    {
+      "id": "missing-1787718668747-tq8s7",
+      "label": "🟡 Processes that create sediment (weathering, erosion, transport, deposition)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718668747-bolca",
+      "label": "🟡 Classification of sediment by grain size (clay, silt, sand, gravel)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718668747-hld84",
+      "label": "🟡 Types of sediment (clastic, chemical, organic)",
+      "done": false
+    },
+    {
+      "id": "missing-1787718668747-qfb82",
+      "label": "🟡 Sedimentary environments (fluvial, marine, aeolian, glacial)",
+      "done": false
+    },
+    {
+      "id": "1787718690497-Hydrology and Flow Measurements",
+      "label": "Hydrology and Flow Measurements",
+      "done": false
+    },
+    {
+      "id": "1787718690497-Channel Morphology and Stream Profiles",
+      "label": "Channel Morphology and Stream Profiles",
+      "done": false
+    },
+    {
+      "id": "1787718690497-Sediment Transport and Deposition Processes",
+      "label": "Sediment Transport and Deposition Processes",
+      "done": false
+    },
+    {
+      "id": "1787718690497-Key Fluid Dynamics Equations and Example Problems",
+      "label": "Key Fluid Dynamics Equations and Example Problems",
+      "done": false
+    }
+  ],
+  "updates": [
+    {
+      "id": "1787718697897",
+      "section": "a1",
+      "update": "delete a1",
+      "createdAt": "2026-08-26T04:31:37.897Z"
+    }
+  ],
+  "sources": [],
+  "notes": [],
+  "tocAnalysis": {
+    "nodes": [
+      {
+        "id": "A",
+        "label": "A Stream",
+        "level": "section",
+        "status": "missing",
+        "description": "No content found under this heading yet.",
+        "suggestion": "The section is completely empty; no definition, equations, examples, or diagrams are provided. Signed Kitkat",
+        "children": [
+          {
+            "id": "A1",
+            "label": "A1 Sediment",
+            "level": "subsection",
+            "status": "partial",
+            "description": "Sediment = rock",
+            "suggestion": "The section only states 'Sediment = rock', which is vastly insufficient for a Science Olympiad binder.",
+            "children": []
+          }
+        ]
+      }
+    ],
+    "summary": {
+      "total": 2,
+      "complete": 0,
+      "partial": 1,
+      "missing": 1
+    }
+  }
+}

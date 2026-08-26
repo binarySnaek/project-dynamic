@@ -13,9 +13,14 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 
 import './index.css';
 // ============================================
-// THEME SYSTEM
+// THEME SYSTEManalyzeBnder
 // ============================================
-
+// Add at the top of the file or in a global.d.ts file
+declare global {
+  interface Window {
+    tooltipTimeout?: NodeJS.Timeout | null;
+  }
+}
 type ThemeColors = {
   primary: string;
   primaryLight: string;
@@ -24,9 +29,15 @@ type ThemeColors = {
   accent: string;
   sidebarPrimary: string;
   sidebarAccent: string;
+  sidebarBg: string; // ADD THIS
   secondary: string;
+  // Also add these missing ones
+  background: string;
+  cardBg: string;
+  border: string;
+  text: string;
+  mutedText: string;
 };
-
 const themes: Record<string, ThemeColors> = {
   blue: {
     primary: '#3b82f6',
@@ -174,8 +185,38 @@ type SavedNote = { id: string; question: string; answer: string; subject: string
 type Todo = { id: string; label: string; done: boolean };
 type BinderUpdate = { id: string; section: string; update: string; createdAt: string };
 
+// At the top of your file, update the type
 type BinderStructureAnalysisResult = {
-  sections: { code: string; status: TocNode['status']; note: string }[];
+  sections?: { 
+    code: string; 
+    status: TocNode['status']; 
+    note: string;
+    missingSubtopics?: string[];
+    newSections?: string[];
+  }[];
+  data?: {
+    sections?: { 
+      code: string; 
+      status: TocNode['status']; 
+      note: string;
+      missingSubtopics?: string[];
+      newSections?: string[];
+    }[];
+  };
+  result?: {
+    sections?: { 
+      code: string; 
+      status: TocNode['status']; 
+      note: string;
+      missingSubtopics?: string[];
+      newSections?: string[];
+    }[];
+  };
+  code?: string;
+  status?: TocNode['status'];
+  note?: string;
+  missingSubtopics?: string[];
+  newSections?: string[];
 };
 
 // ============================================
@@ -191,20 +232,35 @@ const MAX_HEADING_WORDS = 14;
 const PIN_PATTERN = /^\d{4,8}$/;
 // Minimum spacing between sequential Groq calls during binder analysis, so we
 // stay comfortably under free-tier rate limits (roughly 15 requests/minute).
-const GEMINI_REQUEST_DELAY_MS = 5000;
+const GEMINI_REQUEST_DELAY_MS = 20000;
 // Minimum gap enforced client-side between chat questions, so rapid-fire
 // messages don't immediately trip Groq's per-minute rate limit.
-const CHAT_COOLDOWN_MS = 5000;
+const CHAT_COOLDOWN_MS = 20000;
 
 const queryClient = new QueryClient();
-const SOURCE_KEY = 'science-research-sources';
-const NOTES_KEY = 'science-research-notes';
-const TODO_KEY = 'dynamic-planet-todos';
-const UPDATES_KEY = 'dynamic-planet-updates';
-const BINDER_KEY = 'project-dynamic-binder';
-const TOC_ANALYSIS_KEY = 'TOC_ANALYSIS_KEY';
+
+// Base keys (without PIN)
+const BASE_SOURCE_KEY = 'science-research-sources';
+const BASE_NOTES_KEY = 'science-research-notes';
+const BASE_TODO_KEY = 'dynamic-planet-todos';
+const BASE_UPDATES_KEY = 'dynamic-planet-updates';
+const BASE_BINDER_KEY = 'project-dynamic-binder';
+const BASE_TOC_ANALYSIS_KEY = 'TOC_ANALYSIS_KEY';
+const BASE_CHAT_KEY = 'project-dynamic-chat';
 const ACTIVE_PIN_KEY = 'project-dynamic-pin';
-const CHAT_KEY = 'project-dynamic-chat';
+
+// Function to get PIN-specific keys
+function getStorageKeys(pin: string) {
+  return {
+    SOURCE_KEY: `${BASE_SOURCE_KEY}-${pin}`,
+    NOTES_KEY: `${BASE_NOTES_KEY}-${pin}`,
+    TODO_KEY: `${BASE_TODO_KEY}-${pin}`,
+    UPDATES_KEY: `${BASE_UPDATES_KEY}-${pin}`,
+    BINDER_KEY: `${BASE_BINDER_KEY}-${pin}`,
+    TOC_ANALYSIS_KEY: `${BASE_TOC_ANALYSIS_KEY}-${pin}`,
+    CHAT_KEY: `${BASE_CHAT_KEY}-${pin}`,
+  };
+}
 
 function skeletonDepth(code: string): number {
   const digits = code.replace(/^[A-Za-z]+/, '');
@@ -325,6 +381,120 @@ function heuristicStatus(body: string): { status: TocNode['status']; note: strin
   return { status: 'complete', note: '' };
 }
 
+// ============================================
+// SECTION MANAGEMENT FUNCTIONS
+// ============================================
+
+function parseSectionCode(code: string): { letter: string; numbers: number[] } {
+  const match = code.match(/^([A-Z]+)(\d+(?:\.\d+)*)$/);
+  if (!match) throw new Error(`Invalid section code: ${code}`);
+  return {
+    letter: match[1],
+    numbers: match[2].split('.').map(Number),
+  };
+}
+
+function generateSectionCode(letter: string, numbers: number[]): string {
+  return `${letter}${numbers.join('.')}`;
+}
+
+function findSectionIndex(skeleton: SkeletonLine[], code: string): number {
+  return skeleton.findIndex(s => s.code === code);
+}
+
+function insertSection(
+  skeleton: SkeletonLine[],
+  insertAfter: string | null,
+  newTitle: string,
+  newBody: string = ''
+): SkeletonLine[] {
+  const newSkeleton = [...skeleton];
+
+  if (!insertAfter) {
+    const newSection: SkeletonLine = {
+      code: 'A1',
+      title: newTitle,
+      body: newBody,
+      depth: 1,
+    };
+    newSkeleton.unshift(newSection);
+    return renumberAllSections(newSkeleton);
+  }
+
+  const insertIndex = findSectionIndex(newSkeleton, insertAfter);
+  if (insertIndex === -1) throw new Error(`Section ${insertAfter} not found`);
+
+  const afterCode = newSkeleton[insertIndex].code;
+  const afterParts = parseSectionCode(afterCode);
+
+  const newNumbers = [...afterParts.numbers];
+  newNumbers[newNumbers.length - 1]++;
+
+  const newSection: SkeletonLine = {
+    code: generateSectionCode(afterParts.letter, newNumbers),
+    title: newTitle,
+    body: newBody,
+    depth: afterParts.numbers.length,
+  };
+
+  newSkeleton.splice(insertIndex + 1, 0, newSection);
+  return renumberFromIndex(newSkeleton, insertIndex + 1);
+}
+
+function renumberFromIndex(skeleton: SkeletonLine[], startIndex: number): SkeletonLine[] {
+  const newSkeleton = [...skeleton];
+  for (let i = startIndex; i < newSkeleton.length; i++) {
+    const prevCode = newSkeleton[i - 1]?.code || newSkeleton[i].code;
+    const prevParts = parseSectionCode(prevCode);
+    const currentParts = parseSectionCode(newSkeleton[i].code);
+    if (prevParts.letter === currentParts.letter && 
+        prevParts.numbers.length === currentParts.numbers.length) {
+      const newNumbers = [...prevParts.numbers];
+      newNumbers[newNumbers.length - 1] = (i - startIndex) + 1;
+      for (let j = 0; j < prevParts.numbers.length - 1; j++) {
+        newNumbers[j] = prevParts.numbers[j];
+      }
+      newSkeleton[i].code = generateSectionCode(prevParts.letter, newNumbers);
+    }
+  }
+  return newSkeleton;
+}
+
+function renumberAllSections(skeleton: SkeletonLine[]): SkeletonLine[] {
+  const newSkeleton = [...skeleton];
+  let letterCounts: Record<string, number> = {};
+  for (let i = 0; i < newSkeleton.length; i++) {
+    const parts = parseSectionCode(newSkeleton[i].code);
+    if (!letterCounts[parts.letter]) letterCounts[parts.letter] = 0;
+    letterCounts[parts.letter]++;
+    const newNumbers = [letterCounts[parts.letter]];
+    for (let j = 1; j < parts.numbers.length; j++) {
+      newNumbers.push(parts.numbers[j]);
+    }
+    newSkeleton[i].code = generateSectionCode(parts.letter, newNumbers);
+  }
+  return newSkeleton;
+}
+
+function deleteSection(skeleton: SkeletonLine[], code: string): SkeletonLine[] {
+  const deleteIndex = findSectionIndex(skeleton, code);
+  if (deleteIndex === -1) throw new Error(`Section ${code} not found`);
+  const newSkeleton = [...skeleton];
+  newSkeleton.splice(deleteIndex, 1);
+  if (deleteIndex < newSkeleton.length) {
+    return renumberFromIndex(newSkeleton, deleteIndex);
+  }
+  return newSkeleton;
+}
+
+function replaceSection(skeleton: SkeletonLine[], code: string, newBody: string): SkeletonLine[] {
+  const index = findSectionIndex(skeleton, code);
+  if (index === -1) throw new Error(`Section ${code} not found`);
+  const newSkeleton = [...skeleton];
+  newSkeleton[index] = { ...newSkeleton[index], body: newBody };
+  return newSkeleton;
+}
+
 function buildTocTree(lines: SkeletonLine[], statuses: Map<string, { status: TocNode['status']; note: string }>): TocNode[] {
   const roots: TocNode[] = [];
   const stack: { depth: number; node: TocNode }[] = [];
@@ -359,14 +529,35 @@ function readStorage<T>(key: string, fallback: T): T {
   }
 }
 
-function writeLocalState(state: Partial<BinderSyncState>) {
-  window.localStorage.setItem(BINDER_KEY, JSON.stringify(state.binder ?? ''));
-  window.localStorage.setItem(TODO_KEY, JSON.stringify(state.todos ?? []));
-  window.localStorage.setItem(UPDATES_KEY, JSON.stringify(state.updates ?? []));
-  window.localStorage.setItem(SOURCE_KEY, JSON.stringify(state.sources ?? []));
-  window.localStorage.setItem(NOTES_KEY, JSON.stringify(state.notes ?? []));
-  window.localStorage.setItem(TOC_ANALYSIS_KEY, JSON.stringify(state.tocAnalysis ?? null));
+// Note: writeLocalState now takes a pin parameter
+function writeLocalState(state: Partial<BinderSyncState>, pin?: string) {
+  // If no PIN provided, use the active PIN from storage
+  const activePin = pin || readStorage<string | null>(ACTIVE_PIN_KEY, null);
+  if (!activePin) return;
+
+  const keys = getStorageKeys(activePin);
+
+  if (state.binder !== undefined) {
+    window.localStorage.setItem(keys.BINDER_KEY, JSON.stringify(state.binder));
+  }
+  if (state.todos !== undefined) {
+    window.localStorage.setItem(keys.TODO_KEY, JSON.stringify(state.todos));
+  }
+  if (state.updates !== undefined) {
+    window.localStorage.setItem(keys.UPDATES_KEY, JSON.stringify(state.updates));
+  }
+  if (state.sources !== undefined) {
+    window.localStorage.setItem(keys.SOURCE_KEY, JSON.stringify(state.sources));
+  }
+  if (state.notes !== undefined) {
+    window.localStorage.setItem(keys.NOTES_KEY, JSON.stringify(state.notes));
+  }
+  if (state.tocAnalysis !== undefined) {
+    window.localStorage.setItem(keys.TOC_ANALYSIS_KEY, JSON.stringify(state.tocAnalysis));
+  }
 }
+
+
 
 function renderAnswer(text: string) {
   return text.split(/\n\s*\n/).map((paragraph, index) => {
@@ -948,17 +1139,217 @@ function ChatInterface({
 }
 
 // ============================================
+// SECTION MANAGER COMPONENT
+// ============================================
+
+function SectionManager({ 
+  skeleton, 
+  onUpdate,
+  onReevaluate,
+}: {
+  skeleton: SkeletonLine[];
+  onUpdate: (newSkeleton: SkeletonLine[]) => void;
+  onReevaluate: (code: string, content?: string) => void;
+}) {
+  const [newSectionTitle, setNewSectionTitle] = useState('');
+  const [insertAfter, setInsertAfter] = useState<string | null>(null);
+  const [replaceContent, setReplaceContent] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showReplaceModal, setShowReplaceModal] = useState(false);
+  const [selectedSection, setSelectedSection] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [, setFeedback] = useState('');
+
+  const handleAddSection = async () => {
+    if (!newSectionTitle.trim()) return;
+    setIsProcessing(true);
+    try {
+      const newSkeleton = insertSection(skeleton, insertAfter, newSectionTitle.trim());
+      onUpdate(newSkeleton);
+      const newSection = newSkeleton.find(s => !skeleton.some(old => old.code === s.code));
+      if (newSection) {
+        onReevaluate(newSection.code, newSection.body || 'No content yet - add content after creation.');
+      }
+      setNewSectionTitle('');
+      setShowAddModal(false);
+      setFeedback('✅ New section added and being analyzed!');
+    } catch (error) {
+      console.error('Failed to add section:', error);
+      setFeedback('❌ Failed to add section');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDeleteSection = (code: string) => {
+    if (!confirm(`Delete section ${code} and renumber?`)) return;
+    try {
+      const newSkeleton = deleteSection(skeleton, code);
+      onUpdate(newSkeleton);
+      setFeedback(`✅ Section ${code} deleted and renumbered`);
+    } catch (error) {
+      console.error('Failed to delete section:', error);
+      setFeedback('❌ Failed to delete section');
+    }
+  };
+
+  const handleReplaceSection = async (code: string, content: string) => {
+    if (!content.trim()) return;
+    setIsProcessing(true);
+    try {
+      const newSkeleton = replaceSection(skeleton, code, content);
+      onUpdate(newSkeleton);
+      setShowReplaceModal(false);
+      setReplaceContent('');
+      onReevaluate(code, content);
+      setFeedback(`✅ Section ${code} updated and being re-analyzed!`);
+    } catch (error) {
+      console.error('Failed to replace section:', error);
+      setFeedback('❌ Failed to replace section');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const getSectionContent = (code: string) => {
+    const section = skeleton.find(s => s.code === code);
+    return section?.body || '';
+  };
+
+  return (
+    <div className="section-manager">
+      <div className="section-manager-header">
+        <h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0 }}>📑 Section Manager</h3>
+        <button 
+          className="primary-button" 
+          onClick={() => { setInsertAfter(null); setShowAddModal(true); }}
+          disabled={isProcessing}
+          style={{ fontSize: '11px', padding: '4px 12px' }}
+        >
+          <Plus size={14} /> Add Section
+        </button>
+      </div>
+
+      <div className="section-list" style={{ marginTop: '12px' }}>
+        {skeleton.map((section) => (
+          <div 
+            key={section.code}
+            className="section-item"
+            style={{ 
+              paddingLeft: `${(section.depth - 1) * 20}px`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              borderBottom: '1px solid hsl(var(--border) / 0.3)',
+            }}
+          >
+            <span style={{ fontWeight: 600, color: 'hsl(var(--primary))', minWidth: '40px', fontFamily: 'monospace', fontSize: '13px' }}>
+              {section.code}
+            </span>
+            <span style={{ flex: 1, fontSize: '13px' }}>{section.title}</span>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <button 
+                className="icon-button"
+                onClick={() => { setInsertAfter(section.code); setShowAddModal(true); }}
+                disabled={isProcessing}
+                style={{ padding: '4px 8px', background: 'transparent', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', opacity: 0.6 }}
+              >
+                ➕
+              </button>
+              <button 
+                className="icon-button"
+                onClick={() => { setSelectedSection(section.code); setReplaceContent(getSectionContent(section.code)); setShowReplaceModal(true); }}
+                disabled={isProcessing}
+                style={{ padding: '4px 8px', background: 'transparent', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', opacity: 0.6 }}
+              >
+                ✏️
+              </button>
+              <button 
+                className="icon-button delete"
+                onClick={() => handleDeleteSection(section.code)}
+                disabled={isProcessing}
+                style={{ padding: '4px 8px', background: 'transparent', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', opacity: 0.6 }}
+              >
+                🗑️
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Add Section Modal */}
+      {showAddModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }} onClick={() => setShowAddModal(false)}>
+          <div className="modal" style={{ background: 'hsl(var(--card))', borderRadius: '16px', padding: '24px', maxWidth: '500px', width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={(e) => e.stopPropagation()}>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: '18px' }}>Add New Section</h4>
+            <p style={{ fontSize: '12px', color: 'hsl(var(--muted-foreground))' }}>
+              {insertAfter ? `Insert after: ${insertAfter}` : 'Insert at beginning'}
+            </p>
+            <input
+              value={newSectionTitle}
+              onChange={(e) => setNewSectionTitle(e.target.value)}
+              placeholder="Section title (e.g., 'Glacier Formation')"
+              className="modal-input"
+              autoFocus
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid hsl(var(--input))', borderRadius: '8px', background: 'hsl(var(--background))', color: 'hsl(var(--foreground))', fontSize: '14px', margin: '8px 0 16px 0', fontFamily: 'inherit' }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAddSection(); if (e.key === 'Escape') setShowAddModal(false); }}
+            />
+            <div className="modal-actions" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button className="outline-button" onClick={() => setShowAddModal(false)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid hsl(var(--border))', background: 'transparent', color: 'hsl(var(--foreground))', cursor: 'pointer' }}>Cancel</button>
+              <button className="primary-button" onClick={handleAddSection} disabled={!newSectionTitle.trim() || isProcessing} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', cursor: 'pointer' }}>
+                {isProcessing ? '⏳ Adding...' : 'Add & Analyze'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Replace Section Modal */}
+      {showReplaceModal && selectedSection && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }} onClick={() => setShowReplaceModal(false)}>
+          <div className="modal" style={{ background: 'hsl(var(--card))', borderRadius: '16px', padding: '24px', maxWidth: '500px', width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={(e) => e.stopPropagation()}>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: '18px' }}>Replace Content: {selectedSection}</h4>
+            <textarea
+              value={replaceContent}
+              onChange={(e) => setReplaceContent(e.target.value)}
+              placeholder="Paste new content for this section..."
+              rows={6}
+              className="modal-textarea"
+              autoFocus
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid hsl(var(--input))', borderRadius: '8px', background: 'hsl(var(--background))', color: 'hsl(var(--foreground))', fontSize: '14px', margin: '8px 0 16px 0', fontFamily: 'inherit', resize: 'vertical', minHeight: '120px' }}
+            />
+            <div className="modal-actions" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button className="outline-button" onClick={() => setShowReplaceModal(false)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid hsl(var(--border))', background: 'transparent', color: 'hsl(var(--foreground))', cursor: 'pointer' }}>Cancel</button>
+              <button className="primary-button" onClick={() => handleReplaceSection(selectedSection, replaceContent)} disabled={isProcessing} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', cursor: 'pointer' }}>
+                {isProcessing ? '⏳ Updating...' : 'Replace & Re-analyze'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
 // TOC SIDEBAR COMPONENT (for Research tab)
 // ============================================
 
-function TocSidebar({ toc, onNodeHover, hoveredNode, onSectionClick }: { 
+function TocSidebar({ toc, onNodeHover, hoveredNode, onSectionClick, isFullSize = false, onReevaluate, isReevaluating, reevaluateTarget }: { 
   toc: TocAnalysis; 
   onNodeHover: (node: TocNode | null) => void;
   hoveredNode: TocNode | null;
   onSectionClick?: (sectionLabel: string) => void;
+  isFullSize?: boolean;
+  onReevaluate?: (sectionCode: string, content?: string) => void;
+  isReevaluating?: boolean;
+  reevaluateTarget?: string | null;
 }) {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['root']));
-
+  const [isTooltipHovered, setIsTooltipHovered] = useState(false);
+  const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const toggleExpand = (id: string) => {
     setExpandedNodes(prev => {
       const next = new Set(prev);
@@ -983,8 +1374,8 @@ function TocSidebar({ toc, onNodeHover, hoveredNode, onSectionClick }: {
   const getStatusEmoji = (status: string) => {
     switch (status) {
       case 'complete': return '✅';
-      case 'partial': return '⚠️';
-      case 'missing': return '❌';
+      case 'partial': return '🟡';
+      case 'missing': return '🔴';
       default: return '📄';
     }
   };
@@ -1025,15 +1416,102 @@ function TocSidebar({ toc, onNodeHover, hoveredNode, onSectionClick }: {
             borderRadius: '6px',
             transition: 'background 0.2s ease',
             cursor: 'pointer',
+            position: 'relative',
           }}
-          onMouseEnter={() => onNodeHover(node)}
-          onMouseLeave={() => onNodeHover(null)}
+          onMouseEnter={() => {
+            // Clear any pending close timeout
+            if (closeTimeoutRef.current) {
+              clearTimeout(closeTimeoutRef.current);
+              closeTimeoutRef.current = null;
+            }
+            onNodeHover(node);
+          }}
+          onMouseLeave={() => {
+            // Don't close immediately - wait to see if mouse goes to tooltip
+            closeTimeoutRef.current = setTimeout(() => {
+              // Only close if the mouse is not hovering the tooltip
+              if (!isTooltipHovered) {
+                onNodeHover(null);
+              }
+              closeTimeoutRef.current = null;
+            }, 400);
+          }}
           onClick={() => handleNodeClick(node)}
         >
           <div className="flex items-center gap-2 py-1.5 px-2 text-sm">
             <span>{emoji}</span>
             <span className="flex-1 truncate">{node.label}</span>
             {celebration && <span className="text-xs animate-pulse">{celebration}</span>}
+            {node.status !== 'complete' && (
+              <span style={{
+                fontSize: '9px',
+                padding: '1px 8px',
+                borderRadius: '12px',
+                background: node.status === 'partial' ? 'rgba(234, 179, 8, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                color: node.status === 'partial' ? '#eab308' : '#ef4444',
+                whiteSpace: 'nowrap',
+              }}>
+                {node.status === 'partial' ? '⚠️ Has gaps' : '❌ Missing'}
+              </span>
+            )}
+            {/* Re-evaluate button */}
+            {isReevaluating && reevaluateTarget === node.id ? (
+              <span style={{
+                fontSize: '9px',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                background: 'hsl(var(--accent) / 0.15)',
+                color: 'hsl(var(--accent))',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}>
+                <span className="thinking-dot" style={{ fontSize: '6px' }}>●</span>
+                Analyzing...
+              </span>
+            ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onReevaluate) {
+                        // Extract the code from the label - handles "A.", "A1.", "A1.1.", etc.
+                        let codeToUse = node.id;
+                        const codeMatch = node.label.match(/^([A-Z][0-9.]*)/);
+                        if (codeMatch) {
+                          codeToUse = codeMatch[1];
+                          // Keep the trailing dot if it exists (e.g., "A." -> "A.", "A1." -> "A1.")
+                          // But remove trailing dot for top-level sections that might be stored as "A"
+                          // Let's keep it as-is since the reevaluate function will handle all variations
+                        }
+                        console.log('🔍 Re-evaluate clicked for:', node.label, '-> extracted code:', codeToUse);
+                        onReevaluate(codeToUse);
+                      }
+                    }}
+                style={{
+                  fontSize: '10px',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  border: '1px solid hsl(var(--border))',
+                  background: 'transparent',
+                  color: 'hsl(var(--muted-foreground))',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'hsl(var(--primary) / 0.1)';
+                  e.currentTarget.style.borderColor = 'hsl(var(--primary))';
+                  e.currentTarget.style.color = 'hsl(var(--primary))';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'hsl(var(--border))';
+                  e.currentTarget.style.color = 'hsl(var(--muted-foreground))';
+                }}
+                title="Re-evaluate this section with Groq"
+              >
+                🔄
+              </button>
+            )}
           </div>
         </div>
       );
@@ -1069,48 +1547,184 @@ function TocSidebar({ toc, onNodeHover, hoveredNode, onSectionClick }: {
           </div>
         )}
       </div>
-      
     );
   };
 
   return (
     <div className="toc-sidebar" style={{
-      position: 'sticky',
-      top: '80px',
-      maxHeight: 'calc(100vh - 120px)',
+      position: 'relative',
+      maxHeight: isFullSize ? '600px' : 'calc(100vh - 120px)',
       overflowY: 'auto',
-      padding: '16px 12px',
-      background: 'hsl(var(--card) / 0.6)',
-      borderRadius: '20px',
-      border: '1px solid hsl(var(--card-border))',
-      backdropFilter: 'blur(10px)',
+      padding: isFullSize ? '0' : '16px 12px',
+      background: isFullSize ? 'transparent' : 'hsl(var(--card) / 0.6)',
+      borderRadius: isFullSize ? '0' : '20px',
+      border: isFullSize ? 'none' : '1px solid hsl(var(--card-border))',
+      backdropFilter: isFullSize ? 'none' : 'blur(10px)',
     }}>
-      <div className="toc-header mb-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">📑 Binder TOC</h3>
-          <div className="flex gap-2 text-xs">
-            <span style={{ color: '#3b82f6' }}>● {toc.summary.complete}</span>
-            <span style={{ color: '#eab308' }}>● {toc.summary.partial}</span>
-            <span style={{ color: '#ef4444' }}>● {toc.summary.missing}</span>
+      {!isFullSize && (
+        <div className="toc-header mb-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold">📑 Binder TOC</h3>
+            <div className="flex gap-2 text-xs">
+              <span style={{ color: '#3b82f6' }}>● {toc.summary.complete}</span>
+              <span style={{ color: '#eab308' }}>● {toc.summary.partial}</span>
+              <span style={{ color: '#ef4444' }}>● {toc.summary.missing}</span>
+            </div>
+          </div>
+          <div className="flex gap-3 mt-2 text-[10px] text-gray-400">
+            <span>🔵 Complete</span>
+            <span>🟡 Has gaps</span>
+            <span>🔴 Missing</span>
+          </div>
+          <div style={{ fontSize: '9px', color: 'hsl(var(--muted-foreground))', marginTop: '4px', opacity: 0.6 }}>
+            Click any section to ask about it
           </div>
         </div>
-        <div className="flex gap-3 mt-2 text-[10px] text-gray-400">
-          <span>🔵 Complete</span>
-          <span>🟡 Has gaps</span>
-          <span>🔴 Missing</span>
-        </div>
-        <div style={{ fontSize: '9px', color: 'hsl(var(--muted-foreground))', marginTop: '4px', opacity: 0.6 }}>
-          Click any section to ask about it
-        </div>
-      </div>
+      )}
 
       <div className="toc-tree">
         {toc.nodes.map(node => renderNode(node, 0))}
       </div>
+
+      {/* Tooltip Popup - shows when hovering over a section in the Binder tab */}
+      {/* Tooltip Popup - shows when hovering over a section in the Binder tab */}
+      {/* Tooltip Popup - shows when hovering over a section in the Binder tab */}
+      {hoveredNode && hoveredNode.status !== 'complete' && isFullSize && (
+          <div 
+            className="toc-tooltip" 
+            style={{
+              position: 'fixed',
+              top: '50%',
+              right: '40px',
+              transform: 'translateY(-50%)',
+              maxWidth: '380px',
+              width: '100%',
+              padding: '16px 20px',
+              background: 'hsl(var(--card))',
+              borderRadius: '16px',
+              border: '1px solid hsl(var(--card-border))',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+              zIndex: 1000,
+              backdropFilter: 'blur(20px)',
+            }}
+            onMouseEnter={() => {
+              // Clear any pending close timeout
+              if (closeTimeoutRef.current) {
+                clearTimeout(closeTimeoutRef.current);
+                closeTimeoutRef.current = null;
+              }
+              setIsTooltipHovered(true);
+            }}
+            onMouseLeave={() => {
+              setIsTooltipHovered(false);
+              // Close the tooltip after a short delay when leaving
+              closeTimeoutRef.current = setTimeout(() => {
+                onNodeHover(null);
+                closeTimeoutRef.current = null;
+              }, 200);
+            }}
+          >
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">
+              {hoveredNode.status === 'partial' ? '📝' : '🔍'}
+            </span>
+            <div>
+              <div className="font-semibold text-sm">{hoveredNode.label}</div>
+              {hoveredNode.status === 'partial' && hoveredNode.missingSubtopics && hoveredNode.missingSubtopics.length > 0 && (
+                <div className="text-xs mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-md">
+                  <div className="font-semibold text-yellow-700 dark:text-yellow-300">Missing subtopics:</div>
+                  <ul className="list-disc pl-4 mt-1">
+                    {hoveredNode.missingSubtopics.map((topic, idx) => (
+                      <li key={idx}>{topic}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {hoveredNode.suggestion && (
+                <div className="text-xs mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-md">
+                  💡 {hoveredNode.suggestion}
+                </div>
+              )}
+
+              {/* Re-evaluate button inside tooltip */}
+              <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onReevaluate) {
+                      let codeToUse = hoveredNode.id;
+                      const codeMatch = hoveredNode.label.match(/^([A-Z][0-9.]*)/);
+                      if (codeMatch) {
+                        codeToUse = codeMatch[1];
+                        codeToUse = codeToUse.replace(/\.$/, '');
+                      }
+                      // ============================================
+                      // PASS THE BINDER CONTENT TO GROQ
+                      // ============================================
+                      const content = hoveredNode.description || '';
+                      console.log('🔍 Re-evaluate from tooltip:', {
+                        label: hoveredNode.label,
+                        code: codeToUse,
+                        contentLength: content.length,
+                        contentPreview: content.slice(0, 200)
+                      });
+                      // Pass both the code and the content
+                      onReevaluate(codeToUse, content);
+                      setTimeout(() => {
+                        onNodeHover(null);
+                      }, 500);
+                    }
+                  }}
+                style={{
+                  marginTop: '10px',
+                  fontSize: '11px',
+                  padding: '5px 14px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: 'hsl(var(--primary))',
+                  color: 'hsl(var(--primary-foreground))',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  fontWeight: 500,
+                  width: '100%',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'hsl(var(--primary-dark))';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'hsl(var(--primary))';
+                }}
+              >
+                🔄 Re-evaluate this section
+              </button>
+            </div>
+          </div>
+          {/* Close button */}
+          <button
+            onClick={() => {
+              if (window.tooltipTimeout) {
+                clearTimeout(window.tooltipTimeout);
+                window.tooltipTimeout = null;
+              }
+              onNodeHover(null);
+            }}
+            style={{
+              position: 'absolute',
+              top: '8px',
+              right: '8px',
+              background: 'none',
+              border: 'none',
+              color: 'hsl(var(--muted-foreground))',
+              cursor: 'pointer',
+              fontSize: '14px',
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }
-
 // ============================================
 // PIN GATE COMPONENTS
 // ============================================
@@ -1167,7 +1781,7 @@ function PinLanding({ onUnlock }: { onUnlock: (pin: string) => void }) {
       setError(result.error);
       return;
     }
-    writeLocalState(result.state);
+    writeLocalState(result.state, trimmed);
     onUnlock(trimmed);
   };
 
@@ -1259,7 +1873,12 @@ function BinderSetup({ onComplete, initialValue = '', theme }: {
       setMessage('Add the contents of your binder so Project Dynamic has enough context to help.');
       return;
     }
-    window.localStorage.setItem(BINDER_KEY, JSON.stringify(binder.trim()));
+    // Get the PIN from localStorage
+    const pin = readStorage<string | null>(ACTIVE_PIN_KEY, null);
+    if (pin) {
+      const keys = getStorageKeys(pin);
+      window.localStorage.setItem(keys.BINDER_KEY, JSON.stringify(binder.trim()));
+    }
     onComplete(binder.trim());
   };
 
@@ -1518,21 +2137,26 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
   const [activeTab, setActiveTab] = useState<'research' | 'binder' | 'notes' | 'settings'>('research');
 
   // Chat state
+  // Chat state
+  // Chat state
+  const keys = getStorageKeys(pin);
+
+  // Chat state - use PIN-specific key
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
-    const stored = readStorage<ChatMessage[]>('project-dynamic-chat', []);
-    // Convert timestamp strings back to Date objects
+    const stored = readStorage<ChatMessage[]>(keys.CHAT_KEY, []);
     return stored.map(msg => ({
       ...msg,
       timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date()
     }));
   });
+  //const [isChatThinking, setIsChatThinking] = useState(false);
   const [isChatThinking, setIsChatThinking] = useState(false);
 
-  // Binder state
-  const [binder, setBinder] = useState(() => readStorage<string>(BINDER_KEY, ''));
+  // Binder state - use PIN-specific keys
+  const [binder, setBinder] = useState(() => readStorage<string>(keys.BINDER_KEY, ''));
   const [skeletonLines, setSkeletonLines] = useState<SkeletonLine[]>([]);
   const [tocAnalysis, setTocAnalysis] = useState<TocAnalysis | null>(() => 
-    readStorage<TocAnalysis | null>(TOC_ANALYSIS_KEY, null)
+    readStorage<TocAnalysis | null>(keys.TOC_ANALYSIS_KEY, null)
   );
   const [gapAnalysis, setGapAnalysis] = useState<GapAnalysis[]>([]);
   const [hoveredNode, setHoveredNode] = useState<TocNode | null>(null);
@@ -1540,15 +2164,15 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
   const [stage, setStage] = useState<'review' | 'analyzing' | 'ready'>('ready');
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [analysisMessage, setAnalysisMessage] = useState('');
+  const [isReevaluating, setIsReevaluating] = useState(false);
+  const [reevaluateTarget, setReevaluateTarget] = useState<string | null>(null);
+  const [showSectionManager, setShowSectionManager] = useState(false);
 
-  // Notes state
-  const [sources, setSources] = useState<Source[]>(() => readStorage<Source[]>(SOURCE_KEY, []));
-  const [notes, setNotes] = useState<SavedNote[]>(() => readStorage<SavedNote[]>(NOTES_KEY, []));
-  const [todos, setTodos] = useState<Todo[]>(() => readStorage<Todo[]>(TODO_KEY, []));
-  const [updates, setUpdates] = useState<BinderUpdate[]>(() => readStorage<BinderUpdate[]>(UPDATES_KEY, []));
-
-  // UI state
-  // UI state
+  // Notes state - use PIN-specific keys
+  const [sources, setSources] = useState<Source[]>(() => readStorage<Source[]>(keys.SOURCE_KEY, []));
+  const [notes, setNotes] = useState<SavedNote[]>(() => readStorage<SavedNote[]>(keys.NOTES_KEY, []));
+  const [todos, setTodos] = useState<Todo[]>(() => readStorage<Todo[]>(keys.TODO_KEY, []));
+  const [updates, setUpdates] = useState<BinderUpdate[]>(() => readStorage<BinderUpdate[]>(keys.UPDATES_KEY, []));
   const [feedback, setFeedback] = useState('');
   const [insightFocus, setInsightFocus] = useState('');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
@@ -1560,22 +2184,13 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
   const [errorMessage, setErrorMessage] = useState('');
   const [validationMessage, setValidationMessage] = useState('');
 
-  // Color theme state - ADD THIS
+  // Color theme state
   const [colorTheme, setColorTheme] = useState(() => {
     const stored = readStorage<string>('project-dynamic-theme', 'blue');
     return stored;
   });
-  // Get the current theme colors
   const currentTheme = themes[colorTheme] || themes.blue;
-  // Helper to get theme color with opacity
-  const getThemeColor = (color: string, opacity: number = 1) => {
-    if (opacity === 1) return color;
-    // For hex colors, convert to rgba
-    const r = parseInt(color.slice(1, 3), 16);
-    const g = parseInt(color.slice(3, 5), 16);
-    const b = parseInt(color.slice(5, 7), 16);
-    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-  };
+
   // Groq hooks
   const askResearch = useAskGeminiResearch();
   const updateBinderPlan = useUpdateGeminiBinderPlan();
@@ -1587,36 +2202,38 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
   // EFFECTS
   // ============================================
 
-  // Save chat to localStorage
+  // Get PIN-specific keys inside useEffect
   useEffect(() => {
-    window.localStorage.setItem(CHAT_KEY, JSON.stringify(chatMessages));
-  }, [chatMessages]);
+    const keys = getStorageKeys(pin);
+    window.localStorage.setItem(keys.CHAT_KEY, JSON.stringify(chatMessages));
+  }, [chatMessages, pin]);
 
-  // Save sources, notes, todos, updates
   useEffect(() => {
-    window.localStorage.setItem(SOURCE_KEY, JSON.stringify(sources));
-  }, [sources]);
-  useEffect(() => {
-    window.localStorage.setItem('project-dynamic-theme', JSON.stringify(colorTheme));
-  }, [colorTheme]);
-  useEffect(() => {
-    window.localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
-  }, [notes]);
-  useEffect(() => {
-    window.localStorage.setItem(TODO_KEY, JSON.stringify(todos));
-  }, [todos]);
-  useEffect(() => {
-    window.localStorage.setItem(UPDATES_KEY, JSON.stringify(updates));
-  }, [updates]);
+    const keys = getStorageKeys(pin);
+    window.localStorage.setItem(keys.SOURCE_KEY, JSON.stringify(sources));
+  }, [sources, pin]);
 
-  // Apply saved theme on load - ADD THIS
+  useEffect(() => {
+    const keys = getStorageKeys(pin);
+    window.localStorage.setItem(keys.NOTES_KEY, JSON.stringify(notes));
+  }, [notes, pin]);
+
+  useEffect(() => {
+    const keys = getStorageKeys(pin);
+    window.localStorage.setItem(keys.TODO_KEY, JSON.stringify(todos));
+  }, [todos, pin]);
+
+  useEffect(() => {
+    const keys = getStorageKeys(pin);
+    window.localStorage.setItem(keys.UPDATES_KEY, JSON.stringify(updates));
+  }, [updates, pin]);
+
   useEffect(() => {
     const savedTheme = readStorage<string>('project-dynamic-theme', 'blue');
     document.documentElement.setAttribute('data-theme', savedTheme);
     setColorTheme(savedTheme);
   }, []);
 
-  // PIN sync
   useEffect(() => {
     if (hasHydratedRef.current) {
       hasHydratedRef.current = false;
@@ -1631,7 +2248,6 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
     return () => window.clearTimeout(timeout);
   }, [pin, binder, todos, updates, sources, notes, tocAnalysis]);
 
-  // Feedback timer
   useEffect(() => {
     if (!feedback) return;
     const timeout = window.setTimeout(() => setFeedback(''), 2600);
@@ -1665,14 +2281,9 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
     const recentMessages = chatMessages.slice(-8);
     const context = recentMessages.map(m => `${m.role}: ${m.content}`).join('\n');
 
-    // ============================================
-    // FIX: Use skeleton + gap analysis instead of full binder
-    // ============================================
-    // Build a lightweight context from the skeleton and gaps
     let skeletonContext = '';
 
     if (skeletonLines.length > 0) {
-      // Only send section titles and codes (no body content)
       const sectionTitles = skeletonLines.map(line => 
         `${line.code}: ${line.title}`
       ).join('\n');
@@ -1687,21 +2298,19 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
       skeletonContext += `\n\nGaps identified:\n${gapSummary}`;
     }
 
-    // If no skeleton or gaps, send a minimal binder summary
     if (!skeletonContext && binder.length > 0) {
-      // Just send the first 500 characters as a preview
       skeletonContext = `Binder preview (first 500 chars):\n${binder.slice(0, 500)}...`;
     }
 
-    askResearch.mutate(
-      {
-        data: {
-          question: message,
-          ...(subject ? { subject } : {}),
-          binderContext: skeletonContext || 'No binder context available.',
-          context: context ? `Previous conversation:\n${context}` : '',
+      askResearch.mutate(
+        {
+          data: {
+            question: message,
+            ...(subject ? { subject } : {}),
+            context: skeletonContext || 'No binder context available.', // CHANGE: use 'context' not 'binderContext'
+            // context: context ? `Previous conversation:\n${context}` : '', // This is also 'context'
+          },
         },
-      },
       {
         onSuccess: (result) => {
           setChatMessages((prev) => prev.filter(m => m.id !== thinkingId));
@@ -1735,7 +2344,8 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
     if (chatMessages.length === 0) return;
     if (!window.confirm('Clear this research thread? Your notes and saved answers will stay.')) return;
     setChatMessages([]);
-    window.localStorage.removeItem(CHAT_KEY);
+    const keys = getStorageKeys(pin);
+    window.localStorage.removeItem(keys.CHAT_KEY);
     setFeedback('🧹 Research thread cleared. Ready for a new topic!');
   };
 
@@ -1755,12 +2365,60 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
   };
 
   const finishAnalysis = (
-    statuses: Map<string, { status: TocNode['status']; note: string }>,
+    statuses: Map<string, { status: TocNode['status']; note: string; missingSubtopics?: string[]; newSections?: string[] }>,
     resultMessage: string,
   ) => {
-    const nodes = buildTocTree(skeletonLines, statuses);
+    const localStatuses = new Map(statuses);
+
+    const updateTocNodes = (nodes: TocNode[]): TocNode[] => {
+      return nodes.map(node => {
+        const info = localStatuses.get(node.id);
+        if (info) {
+          return {
+            ...node,
+            status: info.status || node.status,
+            suggestion: info.note || node.suggestion,
+            missingSubtopics: (info as any).missingSubtopics || node.missingSubtopics,
+            children: node.children.map(child => {
+              const childInfo = localStatuses.get(child.id);
+              if (childInfo) {
+                return {
+                  ...child,
+                  status: childInfo.status || child.status,
+                  suggestion: childInfo.note || child.suggestion,
+                  missingSubtopics: (childInfo as any).missingSubtopics || child.missingSubtopics,
+                };
+              }
+              return child;
+            })
+          };
+        }
+        if (node.children && node.children.length > 0) {
+          return {
+            ...node,
+            children: updateTocNodes(node.children)
+          };
+        }
+        return node;
+      });
+    };
+
+    let updatedNodes = tocAnalysis?.nodes || [];
+
+    if (skeletonLines.length > 0) {
+      const nodes = buildTocTree(skeletonLines, localStatuses);
+      updatedNodes = nodes;
+    } else {
+      updatedNodes = updateTocNodes(updatedNodes);
+    }
+
+    if (!updatedNodes || updatedNodes.length === 0) {
+      console.warn('⚠️ TOC nodes became empty, using existing TOC');
+      updatedNodes = tocAnalysis?.nodes || [];
+    }
+
     const flatten = (list: TocNode[]): TocNode[] => list.flatMap((n) => [n, ...flatten(n.children)]);
-    const flat = flatten(nodes);
+    const flat = flatten(updatedNodes);
     const complete = flat.filter((n) => n.status === 'complete').length;
     const partial = flat.filter((n) => n.status === 'partial').length;
     const missing = flat.filter((n) => n.status === 'missing').length;
@@ -1774,21 +2432,34 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
       priority: n.status === 'missing' ? 'high' : 'medium',
     }));
 
-    setAnalysisProgress(100);
     setGapAnalysis(gaps);
-    setTocAnalysis({ nodes, summary: { total: flat.length, complete, partial, missing } });
-    window.localStorage.setItem(TOC_ANALYSIS_KEY, JSON.stringify({ nodes, summary: { total: flat.length, complete, partial, missing } }));
+
+    // CRITICAL FIX: Actually set the tocAnalysis state!
+    const newTocAnalysis = { nodes: updatedNodes, summary: { total: flat.length, complete, partial, missing } };
+    setTocAnalysis(newTocAnalysis);
+
+    const keys = getStorageKeys(pin);
+    window.localStorage.setItem(keys.TOC_ANALYSIS_KEY, JSON.stringify(newTocAnalysis));
+
+    setAnalysisProgress(100);
     setStage('ready');
     setFeedback(resultMessage);
   };
 
-  const analyzeBinder = async () => {
-    setStage('analyzing');
-    setAnalysisMessage('🧠 Groq is analyzing each section of your binder...');
-    setAnalysisProgress(10);
+      const analyzeBinder = async () => {
+        console.log('🔍 analyzeBinder called');
+        console.log('📊 skeletonLines length:', skeletonLines.length);
+        console.log('📊 skeletonLines:', skeletonLines);
 
-    try {
-      const totalSections = skeletonLines.length;
+        setStage('analyzing');
+        setAnalysisMessage('🧠 Groq is analyzing each section of your binder...');
+        setAnalysisProgress(10);
+
+        try {
+          const totalSections = skeletonLines.length;
+          console.log('📊 totalSections:', totalSections);
+
+          // ... rest of the function
 
       if (totalSections === 0) {
         throw new Error('No sections found in your binder. Please check your binder format.');
@@ -1806,32 +2477,25 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
         newSections?: string[];
       }[] = [];
 
-        const existingTitles = new Set(skeletonLines.map(line => line.title.toLowerCase()));
-        const analysisStartTime = Date.now();
+      const analysisStartTime = Date.now();
 
-        for (let i = 0; i < skeletonLines.length; i++) {
-          const line = skeletonLines[i];
-          const sectionNumber = i + 1;
-          const progress = 15 + Math.floor((i / totalSections) * 70);
+      for (let i = 0; i < skeletonLines.length; i++) {
+        const line = skeletonLines[i];
+        const sectionNumber = i + 1;
+        const progress = 15 + Math.floor((i / totalSections) * 70);
 
-          // Wait before every request except the first, to stay under Gemini's rate
-          // limit. Once we have at least one real measurement, the estimate below
-          // uses actual elapsed time instead of the flat upfront guess.
-          if (i > 0) {
-            const elapsedSoFar = Date.now() - analysisStartTime;
-            const avgPerSection = elapsedSoFar / i;
-            const remainingSections = totalSections - i;
-            const estRemainingMs = Math.round(avgPerSection * remainingSections);
-            setAnalysisMessage(`⏳ Pacing requests for Groq's rate limit... ~${formatDuration(estRemainingMs)} remaining`);
-            await new Promise(resolve => setTimeout(resolve, GEMINI_REQUEST_DELAY_MS));
-          }
+        if (i > 0) {
+          const elapsedSoFar = Date.now() - analysisStartTime;
+          const avgPerSection = elapsedSoFar / i;
+          const remainingSections = totalSections - i;
+          const estRemainingMs = Math.round(avgPerSection * remainingSections);
+          setAnalysisMessage(`⏳ Pacing requests for Groq's rate limit... ~${formatDuration(estRemainingMs)} remaining`);
+          await new Promise(resolve => setTimeout(resolve, GEMINI_REQUEST_DELAY_MS));
+        }
 
-          setAnalysisProgress(progress);
-          setAnalysisMessage(`🔍 Analyzing section ${sectionNumber}/${totalSections}: ${line.code} ${line.title}`);
+        setAnalysisProgress(progress);
+        setAnalysisMessage(`🔍 Analyzing section ${sectionNumber}/${totalSections}: ${line.code} ${line.title}`);
 
-        // ============================================
-        // Build a simple prompt
-        // ============================================
         const prompt = `
   Analyze this ONE binder section:
 
@@ -1854,12 +2518,8 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
   }`;
 
         try {
-          // ============================================
-          // Try Groq with better error catching
-          // ============================================
-          let geminiSucceeded = false;
-
-          const result = await new Promise<BinderStructureAnalysisResult>((resolve, reject) => {
+          // Wrap the mutate in a promise with better error handling
+          const result = await new Promise<any>((resolve, reject) => {
             analyzeBinderStructure.mutate(
               {
                 data: {
@@ -1875,7 +2535,6 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
               {
                 onSuccess: (data) => {
                   console.log(`✅ Groq success for ${line.code}:`, data);
-                  geminiSucceeded = true;
                   resolve(data);
                 },
                 onError: (error) => {
@@ -1886,19 +2545,34 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
             );
           });
 
-          // Check if we actually got data back
-          if (result && result.sections && result.sections.length > 0) {
-            const sectionResult = result.sections[0];
+          // Check if we got valid data back
+          let sectionResult = null;
+
+          if (result) {
+            // Try different possible response structures
+            if (result.sections && result.sections.length > 0) {
+              sectionResult = result.sections[0];
+            } else if (result.data && result.data.sections && result.data.sections.length > 0) {
+              sectionResult = result.data.sections[0];
+            } else if (result.result && result.result.sections && result.result.sections.length > 0) {
+              sectionResult = result.result.sections[0];
+            } else if (result.code && result.status) {
+              // Direct response
+              sectionResult = result;
+            }
+          }
+
+          if (sectionResult) {
             allResults.push({
               code: line.code,
               status: sectionResult.status || 'partial',
               note: sectionResult.note || 'Analyzed by Groq',
-              missingSubtopics: (sectionResult as any).missingSubtopics || [],
-              newSections: (sectionResult as any).newSections || [],
+              missingSubtopics: sectionResult.missingSubtopics || [],
+              newSections: sectionResult.newSections || [],
             });
-            console.log(`✅ ${line.code}: ${sectionResult.status}`);
           } else {
-            console.warn(`⚠️ Groq returned empty for ${line.code}, using fallback`);
+            // Fallback to heuristic
+            console.warn(`⚠️ No valid response for ${line.code}, using fallback`);
             const status = heuristicStatus(line.body);
             allResults.push({
               code: line.code,
@@ -1908,14 +2582,9 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
               newSections: [],
             });
           }
-
         } catch (sectionError) {
           console.error(`❌ Section ${line.code} failed:`, sectionError);
-          // Check if it's a 400/413 error
-          const errorMsg = sectionError instanceof Error ? sectionError.message : String(sectionError);
-          if (errorMsg.includes('400') || errorMsg.includes('413')) {
-            console.log(`⚠️ ${line.code}: Server rejected request - ${errorMsg}`);
-          }
+          // Use heuristic fallback
           const status = heuristicStatus(line.body);
           allResults.push({
             code: line.code,
@@ -1925,24 +2594,23 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
             newSections: [],
           });
         }
-
-        // Small delay between sections
-       // await new Promise(resolve => setTimeout(resolve, 500));
       }
 
-      // ============================================
-      // Build the final TOC
-      // ============================================
       setAnalysisMessage('📊 Building your binder TOC...');
       setAnalysisProgress(90);
 
-      const statuses = new Map(allResults.map((item) => [item.code, { 
-        status: item.status, 
-        note: item.note,
-        missingSubtopics: item.missingSubtopics || [],
-        newSections: item.newSections || []
-      }] as const));
+      // Build statuses map
+      const statuses = new Map(allResults.map((item) => [
+        item.code, 
+        { 
+          status: item.status, 
+          note: item.note,
+          missingSubtopics: item.missingSubtopics || [],
+          newSections: item.newSections || []
+        }
+      ]));
 
+      // Collect new sections and missing subtopics
       const allNewSections: string[] = [];
       const allMissingSubtopics: string[] = [];
 
@@ -1955,6 +2623,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
         }
       });
 
+      // Add new sections to todos
       if (allNewSections.length > 0) {
         const uniqueNewSections = [...new Set(allNewSections)];
         setTodos((current) => {
@@ -1971,6 +2640,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
         setFeedback(`🧠 Groq found ${uniqueNewSections.length} NEW sections to add!`);
       }
 
+      // Add missing subtopics to todos
       if (allMissingSubtopics.length > 0) {
         const uniqueMissing = [...new Set(allMissingSubtopics)].slice(0, 15);
         setTodos((current) => {
@@ -1997,8 +2667,281 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
       setFeedback(`❌ Groq analysis failed: ${errorMessage}`);
       setErrorMessage(`Groq analysis failed: ${errorMessage}`);
       setAnalysisMessage(`❌ ${errorMessage}`);
-      throw error;
     }
+  };
+
+  // ============================================
+  // RE-EVALUATE A SINGLE SECTION WITH GROQ
+  // ============================================
+  const reevaluateSection = async (sectionCode: string, providedContent?: string) => {
+    console.log('🔄 Re-evaluate called for section code:', sectionCode);
+
+    let section = skeletonLines.find(s => s.code === sectionCode);
+
+    if (!section) {
+      section = skeletonLines.find(s => s.code === sectionCode + '.');
+    }
+
+    if (!section) {
+      const withoutDot = sectionCode.replace(/\.$/, '');
+      section = skeletonLines.find(s => s.code === withoutDot);
+    }
+
+    if (!section) {
+      console.warn('⚠️ Section not found in skeletonLines, using provided content from tooltip');
+      let title = sectionCode;
+      if (tocAnalysis) {
+        const searchNodes = (nodes: TocNode[]): string | null => {
+          for (const node of nodes) {
+            if (node.id === sectionCode || node.label.includes(sectionCode)) {
+              return node.label.replace(/^[A-Z0-9. ]+/, '').trim() || node.label;
+            }
+            if (node.children.length > 0) {
+              const found = searchNodes(node.children);
+              if (found) return found;
+            }
+          }
+          return null;
+        };
+        const foundTitle = searchNodes(tocAnalysis.nodes);
+        if (foundTitle) title = foundTitle;
+      }
+
+      section = {
+        code: sectionCode,
+        title: title,
+        depth: 1,
+        body: providedContent || 'No content available',
+      };
+    }
+
+    let bodyToAnalyze = section.body || '';
+
+    if (providedContent && providedContent.length > 0) {
+      bodyToAnalyze = providedContent;
+    }
+
+    if (!bodyToAnalyze || bodyToAnalyze.trim().length === 0) {
+      console.warn('⚠️ No content to analyze for section:', sectionCode);
+      setFeedback(`⚠️ No content found for "${sectionCode}". Add content first.`);
+      return;
+    }
+
+    setIsReevaluating(true);
+    setReevaluateTarget(sectionCode);
+    setFeedback(`🔍 Re-evaluating ${section.code} ${section.title}...`);
+    setAnalysisMessage(`🔄 Re-evaluating "${section.title}"... Groq is analyzing this section in detail.`);
+
+    try {
+      const prompt = `
+  You are an EXTREMELY THOROUGH Science Olympiad Dynamic Planet expert. Re-analyze this ONE binder section with excruciating detail.
+
+  Section: ${section.code} ${section.title}
+
+  Here is the ACTUAL content from the student's binder:
+  ---
+  ${bodyToAnalyze}
+  ---
+
+  Be VERY SPECIFIC and DEEP. Think like a national-level judge grading this binder.
+
+  1. COMPLETENESS (be VERY picky):
+     - COMPLETE: Every key concept is covered with definitions, examples, diagrams mentioned, and thorough explanations
+     - PARTIAL: Has the basics but missing important details, definitions, examples, or diagrams
+     - MISSING: Empty, just a title, or only 1-2 superficial sentences
+
+  2. If PARTIAL, list EXACTLY what's missing (be specific!):
+     - Missing definitions for key terms
+     - Missing real-world examples
+     - Missing diagrams or visual explanations
+     - Missing connections to related concepts
+     - Missing calculations or formulas
+     - Missing comparison tables
+     - Missing processes or mechanisms
+
+  3. If COMPLETE, explain what makes it excellent.
+
+  4. What NEW sections should be added?
+
+  Return ONLY valid JSON:
+  {
+    "code": "${section.code}",
+    "status": "complete|partial|missing",
+    "note": "Detailed, specific note about this section's strengths and weaknesses",
+    "missingSubtopics": ["specific concept 1", "specific concept 2", "specific concept 3"],
+    "newSections": ["Completely New Topic"]
+  }`;
+
+      const result = await new Promise<BinderStructureAnalysisResult>((resolve, reject) => {
+        analyzeBinderStructure.mutate(
+          {
+            data: {
+              sections: [{
+                code: section.code,
+                title: section.title,
+                body: bodyToAnalyze,
+              }],
+              formatInstructions: prompt,
+              deepAnalysis: true,
+            },
+          },
+          {
+            onSuccess: resolve,
+            onError: reject,
+          }
+        );
+      });
+
+      if (result && result.sections && result.sections.length > 0) {
+        const sectionResult = result.sections[0];
+
+        const updatedStatuses = new Map();
+        if (tocAnalysis) {
+          const flatten = (nodes: TocNode[]): TocNode[] => nodes.flatMap((n) => [n, ...flatten(n.children)]);
+          const flat = flatten(tocAnalysis.nodes);
+          flat.forEach(node => {
+            updatedStatuses.set(node.id, {
+              status: node.status,
+              note: node.suggestion || '',
+              missingSubtopics: node.missingSubtopics || [],
+            });
+          });
+        }
+
+        updatedStatuses.set(section.code, {
+          status: sectionResult.status || 'partial',
+          note: sectionResult.note || 'Re-analyzed by Groq',
+          missingSubtopics: (sectionResult as any).missingSubtopics || [],
+          newSections: (sectionResult as any).newSections || [],
+        });
+
+        const updateTocNodes = (nodes: TocNode[]): TocNode[] => {
+          return nodes.map(node => {
+            if (node.id === section.code) {
+              const info = updatedStatuses.get(section.code);
+              return {
+                ...node,
+                status: info?.status || node.status,
+                suggestion: info?.note || node.suggestion,
+                missingSubtopics: info?.missingSubtopics || node.missingSubtopics,
+                children: node.children.map(child => {
+                  const childInfo = updatedStatuses.get(child.id);
+                  if (childInfo) {
+                    return {
+                      ...child,
+                      status: childInfo.status || child.status,
+                      suggestion: childInfo.note || child.suggestion,
+                      missingSubtopics: childInfo.missingSubtopics || child.missingSubtopics,
+                    };
+                  }
+                  return child;
+                })
+              };
+            }
+            if (node.children && node.children.length > 0) {
+              return {
+                ...node,
+                children: updateTocNodes(node.children)
+              };
+            }
+            return node;
+          });
+        };
+
+        let updatedNodes = tocAnalysis?.nodes || [];
+
+        if (skeletonLines.length > 0 && skeletonLines.some(s => s.code === section.code || s.code === section.code + '.' || s.code === section.code.replace(/\.$/, ''))) {
+          const nodes = buildTocTree(skeletonLines, updatedStatuses);
+          updatedNodes = nodes;
+        } else {
+          updatedNodes = updateTocNodes(updatedNodes);
+        }
+
+        if (!updatedNodes || updatedNodes.length === 0) {
+          updatedNodes = tocAnalysis?.nodes || [];
+        }
+
+        const flatten = (list: TocNode[]): TocNode[] => list.flatMap((n) => [n, ...flatten(n.children)]);
+        const flat = flatten(updatedNodes);
+        const complete = flat.filter((n) => n.status === 'complete').length;
+        const partial = flat.filter((n) => n.status === 'partial').length;
+        const missing = flat.filter((n) => n.status === 'missing').length;
+
+        const gaps: GapAnalysis[] = flat.filter((n) => n.status !== 'complete').map((n) => ({
+          topic: n.label,
+          status: n.status === 'partial' ? 'partial' : 'missing',
+          binderHas: n.description,
+          binderMissing: n.suggestion || '',
+          suggestion: n.suggestion || 'Add more detail here.',
+          priority: n.status === 'missing' ? 'high' : 'medium',
+        }));
+
+        setGapAnalysis(gaps);
+        setTocAnalysis({ nodes: updatedNodes, summary: { total: flat.length, complete, partial, missing } });
+        window.localStorage.setItem(TOC_ANALYSIS_KEY, JSON.stringify({ nodes: updatedNodes, summary: { total: flat.length, complete, partial, missing } }));
+
+        const statusText = sectionResult.status === 'complete' ? 'Complete! ✨' : 
+                           sectionResult.status === 'partial' ? 'Has gaps (check the tooltip)' : 'Missing (needs work)';
+
+        setFeedback(`✅ ${section.code} re-evaluated! Status: ${statusText}`);
+        setAnalysisMessage(`✅ Re-evaluation complete for "${section.title}" - Status: ${sectionResult.status.toUpperCase()}`);
+      }
+    } catch (error) {
+      console.error('❌ re-evaluate fatal error:', error);
+      setFeedback(`❌ Failed to re-evaluate ${section.code}: ${error instanceof Error ? error.message : 'unknown error'}`);
+    } finally {
+      setIsReevaluating(false);
+      setReevaluateTarget(null);
+    }
+  };
+
+  // ============================================
+  // HANDLE SKELETON UPDATE
+  // ============================================
+  const handleSkeletonUpdate = (newSkeleton: SkeletonLine[]) => {
+    setSkeletonLines(newSkeleton);
+
+    const updatedBinder = newSkeleton
+      .map(s => `${s.code}. ${s.title}\n${s.body}`)
+      .join('\n\n');
+    setBinder(updatedBinder);
+
+    const keys = getStorageKeys(pin);
+    window.localStorage.setItem(keys.BINDER_KEY, JSON.stringify(updatedBinder));
+
+    if (tocAnalysis) {
+      const statuses = new Map();
+      const flatten = (nodes: TocNode[]): TocNode[] => nodes.flatMap((n) => [n, ...flatten(n.children)]);
+      const flat = flatten(tocAnalysis.nodes);
+      flat.forEach(node => {
+        const skeletonLine = newSkeleton.find(s => s.code === node.id);
+        if (skeletonLine) {
+          statuses.set(node.id, {
+            status: node.status,
+            note: node.suggestion || '',
+            missingSubtopics: node.missingSubtopics || [],
+          });
+        }
+      });
+
+      const updatedNodes = buildTocTree(newSkeleton, statuses);
+      const flatten2 = (list: TocNode[]): TocNode[] => list.flatMap((n) => [n, ...flatten2(n.children)]);
+      const flat2 = flatten2(updatedNodes);
+      const complete = flat2.filter((n) => n.status === 'complete').length;
+      const partial = flat2.filter((n) => n.status === 'partial').length;
+      const missing = flat2.filter((n) => n.status === 'missing').length;
+
+      setTocAnalysis({ 
+        nodes: updatedNodes, 
+        summary: { total: flat2.length, complete, partial, missing } 
+      });
+      window.localStorage.setItem(keys.TOC_ANALYSIS_KEY, JSON.stringify({ 
+        nodes: updatedNodes, 
+        summary: { total: flat2.length, complete, partial, missing } 
+      }));
+    }
+
+    setFeedback('📋 Binder structure updated!');
   };
 
   // ============================================
@@ -2011,8 +2954,9 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
     setIsResettingBinder(true);
     setFeedback('🔄 Clearing binder...');
 
-    window.localStorage.setItem(BINDER_KEY, JSON.stringify(''));
-    window.localStorage.setItem(TOC_ANALYSIS_KEY, JSON.stringify(null));
+    const keys = getStorageKeys(pin);
+    window.localStorage.setItem(keys.BINDER_KEY, JSON.stringify(''));
+    window.localStorage.setItem(keys.TOC_ANALYSIS_KEY, JSON.stringify(null));
 
     setBinder('');
     setTocAnalysis(null);
@@ -2093,11 +3037,6 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
     });
   };
 
-  const saveAnswer = () => {
-    // This function is now handled by the chat's "Save as note" functionality
-    // We'll keep it for compatibility
-  };
-
   const switchPin = () => {
     if (syncStatus === 'syncing' && !window.confirm('Still saving your latest changes — switch PINs anyway?')) return;
     onForgetPin();
@@ -2110,13 +3049,6 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
     onForgetPin();
   };
 
-  const scrollTo = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
-  // ============================================
-  // RENDER: CHECK SETUP STATE
-  // ============================================
   // ============================================
   // HANDLE BINDER COMPLETE
   // ============================================
@@ -2125,9 +3057,11 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
     setEditingBinder(false);
     skimBinder(binderContent);
   };
+
   const editSkeleton = () => {
     setEditingBinder(true);
   };
+
   if (!binder.trim() || editingBinder) {
     return <BinderSetup onComplete={handleBinderComplete} initialValue={binder} theme={currentTheme} />;
   }
@@ -2139,6 +3073,14 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
   if (stage === 'analyzing') {
     return <AnalyzingScreen message={analysisMessage} progress={analysisProgress} />;
   }
+
+  // ============================================
+  // RENDER: CHECK SETUP STATE
+  // ============================================
+  // ============================================
+  // HANDLE BINDER COMPLETE
+  // ============================================
+ 
 
   // ============================================
   // RENDER: MAIN WORKSPACE
@@ -2360,12 +3302,14 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
               {/* TOC Sidebar */}
               <div style={{ position: 'sticky', top: '0', height: '100%', overflowY: 'auto' }}>
                 {tocAnalysis ? (
-                  <TocSidebar 
-                    toc={tocAnalysis} 
-                    onNodeHover={setHoveredNode}
-                    hoveredNode={hoveredNode}
-                    onSectionClick={handleSectionClickForOverview}
-                  />
+              <TocSidebar 
+                toc={tocAnalysis} 
+                onNodeHover={setHoveredNode}
+                hoveredNode={hoveredNode}
+                onSectionClick={handleSectionClickForOverview}
+                isReevaluating={isReevaluating}
+                reevaluateTarget={reevaluateTarget}
+              />
                 ) : (
                   <div style={{
                     padding: '20px',
@@ -2389,7 +3333,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
               ============================================ */}
           {activeTab === 'binder' && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-              {/* Left: Full TOC */}
+              {/* Left: Full TOC or Section Manager */}
               <div>
                 <div style={{
                   background: 'hsl(var(--card) / 0.5)',
@@ -2399,20 +3343,42 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
                   maxHeight: '500px',
                   overflowY: 'auto',
                 }}>
-                  <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
-                    📑 Full Binder TOC
-                    <span style={{ fontSize: '11px', fontWeight: 400, color: 'hsl(var(--muted-foreground))', marginLeft: '8px' }}>
-                      {tocAnalysis ? `${tocAnalysis.summary.complete} ✅ · ${tocAnalysis.summary.partial} 🟡 · ${tocAnalysis.summary.missing} 🔴` : 'No binder loaded'}
-                    </span>
-                  </h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0 }}>
+                      {showSectionManager ? '🔧 Section Manager' : '📑 Full Binder TOC'}
+                      <span style={{ fontSize: '11px', fontWeight: 400, color: 'hsl(var(--muted-foreground))', marginLeft: '8px' }}>
+                        {tocAnalysis ? `${tocAnalysis.summary.complete} ✅ · ${tocAnalysis.summary.partial} 🟡 · ${tocAnalysis.summary.missing} 🔴` : 'No binder loaded'}
+                      </span>
+                    </h3>
+                    <button 
+                      className="outline-button" 
+                      onClick={() => setShowSectionManager(!showSectionManager)}
+                      style={{ fontSize: '10px', padding: '4px 12px' }}
+                    >
+                      {showSectionManager ? '📖 View TOC' : '🔧 Manage Sections'}
+                    </button>
+                  </div>
+
                   {tocAnalysis ? (
                     <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                      <TocSidebar 
-                        toc={tocAnalysis} 
-                        onNodeHover={setHoveredNode}
-                        hoveredNode={hoveredNode}
-                        onSectionClick={handleSectionClickForOverview}
-                      />
+                      {showSectionManager ? (
+                        <SectionManager 
+                          skeleton={skeletonLines}
+                          onUpdate={handleSkeletonUpdate}
+                          onReevaluate={reevaluateSection}
+                        />
+                      ) : (
+                        <TocSidebar 
+                          toc={tocAnalysis} 
+                          onNodeHover={setHoveredNode}
+                          hoveredNode={hoveredNode}
+                          onSectionClick={handleSectionClickForOverview}
+                          isFullSize={true}
+                          onReevaluate={reevaluateSection}
+                          isReevaluating={isReevaluating}
+                          reevaluateTarget={reevaluateTarget}
+                        />
+                      )}
                     </div>
                   ) : (
                     <div style={{ textAlign: 'center', padding: '40px 20px', color: 'hsl(var(--muted-foreground))' }}>

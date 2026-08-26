@@ -674,3 +674,34 @@
   .primary-button { width: 100%; }
   .source-form, .add-todo-form { flex-wrap: wrap; }
 }
+  /* Section Manager Styles */
+  .section-manager {
+    background: transparent;
+    padding: 0;
+  }
+
+  .section-manager-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .section-item:hover {
+    background: hsl(var(--muted) / 0.3);
+  }
+
+  .section-actions .icon-button:hover:not(:disabled) {
+    background: hsl(var(--muted) / 0.5);
+    opacity: 1;
+  }
+
+  .section-actions .icon-button.delete:hover:not(:disabled) {
+    background: hsl(var(--destructive) / 0.2);
+    color: hsl(var(--destructive));
+  }
+
+  .section-actions .icon-button:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
