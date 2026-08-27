@@ -2895,50 +2895,66 @@ window.localStorage.setItem(keys.TOC_ANALYSIS_KEY, JSON.stringify({ nodes: updat
   // HANDLE SKELETON UPDATE
   // ============================================
   const handleSkeletonUpdate = (newSkeleton: SkeletonLine[]) => {
-    setSkeletonLines(newSkeleton);
+  setSkeletonLines(newSkeleton);
 
-    const updatedBinder = newSkeleton
-      .map(s => `${s.code}. ${s.title}\n${s.body}`)
-      .join('\n\n');
-    setBinder(updatedBinder);
+  // Rebuild the binder string from the updated skeleton
+  const updatedBinder = newSkeleton
+    .map(s => `${s.code}. ${s.title}\n${s.body}`)
+    .join('\n\n');
+  setBinder(updatedBinder);
 
-    const keys = getStorageKeys(pin);
-    window.localStorage.setItem(keys.BINDER_KEY, JSON.stringify(updatedBinder));
+  const keys = getStorageKeys(pin);
+  window.localStorage.setItem(keys.BINDER_KEY, JSON.stringify(updatedBinder));
 
-    if (tocAnalysis) {
-      const statuses = new Map();
-      const flatten = (nodes: TocNode[]): TocNode[] => nodes.flatMap((n) => [n, ...flatten(n.children)]);
-      const flat = flatten(tocAnalysis.nodes);
-      flat.forEach(node => {
-        const skeletonLine = newSkeleton.find(s => s.code === node.id);
-        if (skeletonLine) {
-          statuses.set(node.id, {
-            status: node.status,
-            note: node.suggestion || '',
-            missingSubtopics: node.missingSubtopics || [],
-          });
-        }
+  // IMPORTANT: Rebuild the TOC analysis from scratch
+  // Use existing statuses if available, or default to 'partial'
+  const statuses = new Map();
+  
+  if (tocAnalysis) {
+    // Try to preserve existing statuses
+    const flatten = (nodes: TocNode[]): TocNode[] => nodes.flatMap((n) => [n, ...flatten(n.children)]);
+    const flat = flatten(tocAnalysis.nodes);
+    flat.forEach(node => {
+      const skeletonLine = newSkeleton.find(s => s.code === node.id);
+      if (skeletonLine) {
+        statuses.set(node.id, {
+          status: node.status,
+          note: node.suggestion || '',
+          missingSubtopics: node.missingSubtopics || [],
+        });
+      }
+    });
+  }
+
+  // If a section doesn't have a status yet, mark it as 'partial'
+  newSkeleton.forEach(section => {
+    if (!statuses.has(section.code)) {
+      statuses.set(section.code, {
+        status: 'partial',
+        note: 'New section - needs analysis',
+        missingSubtopics: [],
       });
-
-      const updatedNodes = buildTocTree(newSkeleton, statuses);
-      const flatten2 = (list: TocNode[]): TocNode[] => list.flatMap((n) => [n, ...flatten2(n.children)]);
-      const flat2 = flatten2(updatedNodes);
-      const complete = flat2.filter((n) => n.status === 'complete').length;
-      const partial = flat2.filter((n) => n.status === 'partial').length;
-      const missing = flat2.filter((n) => n.status === 'missing').length;
-
-      setTocAnalysis({ 
-        nodes: updatedNodes, 
-        summary: { total: flat2.length, complete, partial, missing } 
-      });
-      window.localStorage.setItem(keys.TOC_ANALYSIS_KEY, JSON.stringify({ 
-        nodes: updatedNodes, 
-        summary: { total: flat2.length, complete, partial, missing } 
-      }));
     }
+  });
 
-    setFeedback('📋 Binder structure updated!');
+  // Rebuild the TOC tree
+  const updatedNodes = buildTocTree(newSkeleton, statuses);
+  const flatten2 = (list: TocNode[]): TocNode[] => list.flatMap((n) => [n, ...flatten2(n.children)]);
+  const flat2 = flatten2(updatedNodes);
+  const complete = flat2.filter((n) => n.status === 'complete').length;
+  const partial = flat2.filter((n) => n.status === 'partial').length;
+  const missing = flat2.filter((n) => n.status === 'missing').length;
+
+  const newTocAnalysis = { 
+    nodes: updatedNodes, 
+    summary: { total: flat2.length, complete, partial, missing } 
   };
+  
+  setTocAnalysis(newTocAnalysis);
+  window.localStorage.setItem(keys.TOC_ANALYSIS_KEY, JSON.stringify(newTocAnalysis));
+
+  setFeedback('📋 Binder structure updated! TOC rebuilt.');
+};
 
   // ============================================
   // RESET BINDER
