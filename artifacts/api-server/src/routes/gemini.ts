@@ -247,8 +247,8 @@ Title: ${section.title || 'Untitled'}
 Content:
 ${(section.body || '').slice(0, 2000)}
 
-Determine if this section is COMPLETE, PARTIAL, or MISSING.
-If PARTIAL or MISSING, suggest what's missing.
+Determine if this section is COMPLETE, PARTIAL.
+If PARTIAL , suggest what's missing.
 
 You should try to be as harsh as possible, though if something is missing, please be speciific. You cannot just say missing comparison tables or something. If a piece of knowledge is specfically missing, mention it. If you can only mark like 1 or 2 missing things, and they are like very minor things, mark it as complete, it is close enough, though maybe put a warning sign next to it. If there are 3 or more missing things, then mark it as partial, and list every SPECIC thing wrong with it. There are no diagrams/visual aids because thie input on this thing text...so...if it mentions a diagram assume there is a diagram. Thanks. When replying to anything, amke sure to be super ultra specific to like essentially tell the user what they are exactly missing. Like if they are missing depth in A, tell them to add what they missed in A. 
 
@@ -256,7 +256,7 @@ You should try to be as harsh as possible, though if something is missing, pleas
 Return ONLY valid JSON:
 {
   "code": "${section.code || 'unknown'}",
-  "status": "complete|partial|missing",
+  "status": "complete|partial",
   "note": "Brief note on this section",
   "missingSubtopics": ["concept 1", "concept 2"],
   "newSections": ["New Section Title"]
