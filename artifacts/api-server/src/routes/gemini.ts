@@ -239,7 +239,7 @@ router.post("/gemini/binder-structure", async (req, res) => {
       const section = finalSections[i];
       console.log(`🔍 Processing section ${i+1}/${Math.min(finalSections.length, 5)}: ${section.code || 'unknown'}`);
 
-      const prompt = `
+     const prompt = `
 Analyze this ONE binder section:
 
 Code: ${section.code || 'unknown'}
@@ -250,9 +250,8 @@ ${(section.body || '').slice(0, 2000)}
 Determine if this section is COMPLETE, PARTIAL.
 If PARTIAL , suggest what's missing.
 
-You should try to be as harsh as possible, to a resonable extent. You cannot just say missing comparison tables or something. If a piece of knowledge is specfically missing, mention it. If you can only mark like 1 or 2 missing things, and they are like very minor things, mark it as complete. If there are 3 or more missing things, then mark it as partial, and list every SPECIC thing wrong with it. There are no diagrams/visual aids because thie input on this thing text...so...if it mentions a diagram assume there is a diagram. Like if they are missing depth in A, tell them to add what they missed in A. 
-Anyways, yeah, in the notes section, if you decide it is partial, put 3 or more CLEAR OBJECTIVES on what to add or fix. ok?
-Reminder that this is just a binder section. For example, ifa section is A1. Sediments, do NOT roast them for not including other aspects of erat'hs fresh waters. instead, take your time and analyze what is actually within the section, and see if they have anything missing within sediments. 
+You should try to be as harsh as possible, though if something is missing, please be speciific. You cannot just say missing comparison tables or something. If a piece of knowledge is specfically missing, mention it. If you can only mark like 1 or 2 missing things, and they are like very minor things, mark it as complete, it is close enough, though maybe put a warning sign next to it. If there are 3 or more missing things, then mark it as partial, and list every SPECIC thing wrong with it. There are no diagrams/visual aids because thie input on this thing text...so...if it mentions a diagram assume there is a diagram. Thanks. When replying to anything, amke sure to be super ultra specific to like essentially tell the user what they are exactly missing. Like if they are missing depth in A, tell them to add what they missed in A. 
+Anyways, yeah, in the notes section, if you decide it is partial, put 3 or more CLEAR OBJECTIVES on what to add or fix. ok? Also remmeber that this is just a subtopic, you should not flame the user to not including things that woldn't make sense in hte category.
 
 Return ONLY valid JSON:
 {
