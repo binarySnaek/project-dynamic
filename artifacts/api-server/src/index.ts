@@ -25,7 +25,7 @@ const frontendDist = path.resolve(__dirname, '../../artifacts/science-research-p
 app.use(express.static(frontendDist));
 
 // For any route not matched by API, serve the React index.html
-app.get('/*./', (req, res) => {
+app.get('/.*/', (req, res) => {
   res.sendFile(path.join(frontendDist, 'index.html'));
 });
 app.listen(port, (err) => {
