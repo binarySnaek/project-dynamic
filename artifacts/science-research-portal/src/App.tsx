@@ -1563,6 +1563,373 @@ function SectionManager({
   );
 }
 // ============================================
+// TOC SIDEBAR COMPONENT (for Research tab)
+// ============================================
+
+function TocSidebar({ toc, onNodeHover, hoveredNode, onSectionClick, isFullSize = false, onReevaluate, isReevaluating, reevaluateTarget }: { 
+  toc: TocAnalysis; 
+  onNodeHover: (node: TocNode | null) => void;
+  hoveredNode: TocNode | null;
+  onSectionClick?: (sectionLabel: string) => void;
+  isFullSize?: boolean;
+  onReevaluate?: (sectionCode: string, content?: string) => void;
+  isReevaluating?: boolean;
+  reevaluateTarget?: string | null;
+}) {
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['root']));
+  const [isTooltipHovered, setIsTooltipHovered] = useState(false);
+  const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const toggleExpand = (id: string) => {
+    setExpandedNodes(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'complete': return '#3b82f6';
+      case 'partial': return '#eab308';
+      case 'missing': return '#ef4444';
+      default: return '#6b7280';
+    }
+  };
+
+  const getStatusEmoji = (status: string) => {
+    switch (status) {
+      case 'complete': return '✅';
+      case 'partial': return '🟡';
+      case 'missing': return '🔴';
+      default: return '📄';
+    }
+  };
+
+  const getCelebrationEmoji = (status: string) => {
+    if (status === 'complete') {
+      const emojis = ['🎉', '🌟', '✨', '💫', '🏆', '⭐', '👏', '🎊'];
+      return emojis[Math.floor(Math.random() * emojis.length)];
+    }
+    return '';
+  };
+
+  const handleNodeClick = (node: TocNode) => {
+    if (onSectionClick) {
+      onSectionClick(node.label);
+    }
+  };
+
+  const renderNode = (node: TocNode, depth: number = 0) => {
+    const isExpanded = expandedNodes.has(node.id);
+    const hasChildren = node.children && node.children.length > 0;
+    const isLeaf = !hasChildren;
+
+    if (isLeaf) {
+      const color = getStatusColor(node.status);
+      const emoji = getStatusEmoji(node.status);
+      const celebration = getCelebrationEmoji(node.status);
+      const isHovered = hoveredNode?.id === node.id;
+
+      return (
+        <div 
+          key={node.id}
+          className="toc-leaf"
+          style={{
+            paddingLeft: `${depth * 16 + 8}px`,
+            borderLeft: `3px solid ${color}`,
+            background: isHovered ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
+            borderRadius: '6px',
+            transition: 'background 0.2s ease',
+            cursor: 'pointer',
+            position: 'relative',
+          }}
+          onMouseEnter={() => {
+            if (closeTimeoutRef.current) {
+              clearTimeout(closeTimeoutRef.current);
+              closeTimeoutRef.current = null;
+            }
+            onNodeHover(node);
+          }}
+          onMouseLeave={() => {
+            closeTimeoutRef.current = setTimeout(() => {
+              if (!isTooltipHovered) {
+                onNodeHover(null);
+              }
+              closeTimeoutRef.current = null;
+            }, 400);
+          }}
+          onClick={() => handleNodeClick(node)}
+        >
+          <div className="flex items-center gap-2 py-1.5 px-2 text-sm">
+            <span>{emoji}</span>
+            <span className="flex-1 truncate">{node.label}</span>
+            {celebration && <span className="text-xs animate-pulse">{celebration}</span>}
+            {node.status !== 'complete' && (
+              <span style={{
+                fontSize: '9px',
+                padding: '1px 8px',
+                borderRadius: '12px',
+                background: node.status === 'partial' ? 'rgba(234, 179, 8, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                color: node.status === 'partial' ? '#eab308' : '#ef4444',
+                whiteSpace: 'nowrap',
+              }}>
+                {node.status === 'partial' ? '⚠️ Has gaps' : '❌ Missing'}
+              </span>
+            )}
+            {/* Re-evaluate button */}
+            {isReevaluating && reevaluateTarget === node.id ? (
+              <span style={{
+                fontSize: '9px',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                background: 'hsl(var(--accent) / 0.15)',
+                color: 'hsl(var(--accent))',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}>
+                <span className="thinking-dot" style={{ fontSize: '6px' }}>●</span>
+                Analyzing...
+              </span>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onReevaluate) {
+                    let codeToUse = node.id;
+                    const codeMatch = node.label.match(/^([A-Z][0-9.]*)/);
+                    if (codeMatch) {
+                      codeToUse = codeMatch[1];
+                    }
+                    console.log('🔍 Re-evaluate clicked for:', node.label, '-> extracted code:', codeToUse);
+                    onReevaluate(codeToUse);
+                  }
+                }}
+                style={{
+                  fontSize: '10px',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  border: '1px solid hsl(var(--border))',
+                  background: 'transparent',
+                  color: 'hsl(var(--muted-foreground))',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'hsl(var(--primary) / 0.1)';
+                  e.currentTarget.style.borderColor = 'hsl(var(--primary))';
+                  e.currentTarget.style.color = 'hsl(var(--primary))';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.borderColor = 'hsl(var(--border))';
+                  e.currentTarget.style.color = 'hsl(var(--muted-foreground))';
+                }}
+                title="Re-evaluate this section with Groq"
+              >
+                🔄
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div key={node.id}>
+        <div 
+          className="toc-parent"
+          style={{
+            paddingLeft: `${depth * 16 + 8}px`,
+            cursor: 'pointer',
+            borderRadius: '6px',
+            transition: 'background 0.2s ease',
+          }}
+          onClick={() => toggleExpand(node.id)}
+          onMouseEnter={() => onNodeHover(node)}
+          onMouseLeave={() => onNodeHover(null)}
+        >
+          <div className="flex items-center gap-2 py-1.5 px-2 text-sm font-medium hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md">
+            <span className="text-xs transition-transform duration-200" style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+              ▶
+            </span>
+            <span>{node.label}</span>
+            <span className="text-xs text-gray-400 ml-auto">
+              {node.children.filter(c => c.status === 'complete').length}/{node.children.length}
+            </span>
+          </div>
+        </div>
+        {isExpanded && (
+          <div className="toc-children">
+            {node.children.map(child => renderNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="toc-sidebar" style={{
+      position: 'relative',
+      maxHeight: isFullSize ? '600px' : 'calc(100vh - 120px)',
+      overflowY: 'auto',
+      padding: isFullSize ? '0' : '16px 12px',
+      background: isFullSize ? 'transparent' : 'hsl(var(--card) / 0.6)',
+      borderRadius: isFullSize ? '0' : '20px',
+      border: isFullSize ? 'none' : '1px solid hsl(var(--card-border))',
+      backdropFilter: isFullSize ? 'none' : 'blur(10px)',
+    }}>
+      {!isFullSize && (
+        <div className="toc-header mb-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold">📑 Binder TOC</h3>
+            <div className="flex gap-2 text-xs">
+              <span style={{ color: '#3b82f6' }}>● {toc.summary.complete}</span>
+              <span style={{ color: '#eab308' }}>● {toc.summary.partial}</span>
+              <span style={{ color: '#ef4444' }}>● {toc.summary.missing}</span>
+            </div>
+          </div>
+          <div className="flex gap-3 mt-2 text-[10px] text-gray-400">
+            <span>🔵 Complete</span>
+            <span>🟡 Has gaps</span>
+            <span>🔴 Missing</span>
+          </div>
+          <div style={{ fontSize: '9px', color: 'hsl(var(--muted-foreground))', marginTop: '4px', opacity: 0.6 }}>
+            Click any section to ask about it
+          </div>
+        </div>
+      )}
+
+      <div className="toc-tree">
+        {toc.nodes.map(node => renderNode(node, 0))}
+      </div>
+
+      {hoveredNode && hoveredNode.status !== 'complete' && isFullSize && (
+        <div 
+          className="toc-tooltip" 
+          style={{
+            position: 'fixed',
+            top: '50%',
+            right: '40px',
+            transform: 'translateY(-50%)',
+            maxWidth: '380px',
+            width: '100%',
+            padding: '16px 20px',
+            background: 'hsl(var(--card))',
+            borderRadius: '16px',
+            border: '1px solid hsl(var(--card-border))',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+            zIndex: 1000,
+            backdropFilter: 'blur(20px)',
+          }}
+          onMouseEnter={() => {
+            if (closeTimeoutRef.current) {
+              clearTimeout(closeTimeoutRef.current);
+              closeTimeoutRef.current = null;
+            }
+            setIsTooltipHovered(true);
+          }}
+          onMouseLeave={() => {
+            setIsTooltipHovered(false);
+            closeTimeoutRef.current = setTimeout(() => {
+              onNodeHover(null);
+              closeTimeoutRef.current = null;
+            }, 200);
+          }}
+        >
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">
+              {hoveredNode.status === 'partial' ? '📝' : '🔍'}
+            </span>
+            <div>
+              <div className="font-semibold text-sm">{hoveredNode.label}</div>
+              {hoveredNode.status === 'partial' && hoveredNode.missingSubtopics && hoveredNode.missingSubtopics.length > 0 && (
+                <div className="text-xs mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-md">
+                  <div className="font-semibold text-yellow-700 dark:text-yellow-300">Missing subtopics:</div>
+                  <ul className="list-disc pl-4 mt-1">
+                    {hoveredNode.missingSubtopics.map((topic, idx) => (
+                      <li key={idx}>{topic}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {hoveredNode.suggestion && (
+                <div className="text-xs mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-md">
+                  💡 {hoveredNode.suggestion}
+                </div>
+              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onReevaluate) {
+                    let codeToUse = hoveredNode.id;
+                    const codeMatch = hoveredNode.label.match(/^([A-Z][0-9.]*)/);
+                    if (codeMatch) {
+                      codeToUse = codeMatch[1];
+                      codeToUse = codeToUse.replace(/\.$/, '');
+                    }
+                    const content = hoveredNode.description || '';
+                    onReevaluate(codeToUse, content);
+                    setTimeout(() => {
+                      onNodeHover(null);
+                    }, 500);
+                  }
+                }}
+                style={{
+                  marginTop: '10px',
+                  fontSize: '11px',
+                  padding: '5px 14px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: 'hsl(var(--primary))',
+                  color: 'hsl(var(--primary-foreground))',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  fontWeight: 500,
+                  width: '100%',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'hsl(var(--primary-dark))';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'hsl(var(--primary))';
+                }}
+              >
+                🔄 Re-evaluate this section
+              </button>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              if (window.tooltipTimeout) {
+                clearTimeout(window.tooltipTimeout);
+                window.tooltipTimeout = null;
+              }
+              onNodeHover(null);
+            }}
+            style={{
+              position: 'absolute',
+              top: '8px',
+              right: '8px',
+              background: 'none',
+              border: 'none',
+              color: 'hsl(var(--muted-foreground))',
+              cursor: 'pointer',
+              fontSize: '14px',
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+// ============================================
 // PIN GATE COMPONENTS
 // ============================================
 
