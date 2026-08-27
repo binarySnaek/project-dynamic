@@ -21,11 +21,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Serve static files from the React build (adjust path as needed)
+// Serve static files from the React build
 const frontendDist = path.resolve(__dirname, '../../artifacts/science-research-portal/dist');
 app.use(express.static(frontendDist));
 
 // For any route not matched by API, serve the React index.html
-app.get('/.*/', (req, res) => {
+app.get(/.*/, (req, res) => {    // <-- NO quotes around /.*/
   res.sendFile(path.join(frontendDist, 'index.html'));
 });
 app.listen(port, (err) => {
