@@ -15,7 +15,7 @@
   "devDependencies": {
     "prettier": "^3.9.6",
     "typescript": "~5.9.3"
-  }
+  },
   "scripts": {
     "build:api": "pnpm -r --filter @workspace/api-server run build",
     "start": "node artifacts/api-server/dist/index.mjs"
