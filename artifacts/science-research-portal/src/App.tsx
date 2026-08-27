@@ -3381,12 +3381,12 @@ window.localStorage.setItem(keys.TOC_ANALYSIS_KEY, JSON.stringify({ nodes: updat
                   {tocAnalysis ? (
                     <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
                       {showSectionManager ? (
-                        <SectionManager 
-                          skeleton={skeletonLines}
-                          onUpdate={handleSkeletonUpdate}
-                          onReevaluate={reevaluateSection}
-                        />
-                      ) : (
+  <SectionManager
+    tocAnalysis={tocAnalysis}                 // pass the full TOC
+    onUpdateToc={handleTocUpdate}            // new handler for TOC updates
+    onReevaluate={reevaluateSection}
+  />
+) : (
                         <TocSidebar 
                           toc={tocAnalysis} 
                           onNodeHover={setHoveredNode}
