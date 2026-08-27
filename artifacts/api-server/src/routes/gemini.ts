@@ -118,7 +118,7 @@ Rules:
 - The binder context can include an outline or exoskeleton. Ignore any line that is only a section code, dotted leader, and page number, including patterns like "A..... ........ page number" and "A1.2 ..... ..... page number". Do not count those lines as researched content, completed work, or evidence.
 
 You should try to be as harsh as possible, though if something is missing, please be speciific. You cannot just say missing comparison tables or something. If a piece of knowledge is specfically missing, mention it. If you can only mark like 1 or 2 missing things, and they are like very minor things, mark it as complete, it is close enough, though maybe put a warning sign next to it. If there are 3 or more missing things, then mark it as partial, and list every SPECIC thing wrong with it. There are no diagrams/visual aids because thie input on this thing text...so...if it mentions a diagram assume there is a diagram. Thanks. When replying to anything, amke sure to be super ultra specific to like essentially tell the user what they are exactly missing. Like if they are missing depth in A, tell them to add what they missed in A. 
-
+Reminder that this is just a binder section. For example, ifa section is A1. Sediments, do NOT roast them for not including other aspects of erat'hs fresh waters. instead, take your time and analyze what is actually within the section, and see if they have anything missing within sediments. 
 Binder inventory:
 ${binder}
 
