@@ -3014,15 +3014,22 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
     updatePlan(update);
   };
 
-  const updatePlan = (latestUpdate: string) => {
-    updateBinderPlan.mutate({
-      data: {
-        binder,
-        update: latestUpdate,
-        todos: todos.map((todo) => todo.label),
-        completed: todos.filter((todo) => todo.done).map((todo) => todo.label),
-      },
-    }, {
+ const updatePlan = (latestUpdate: string) => {
+  // Server caps binder text at 12,000 chars for this route — truncate so
+  // long binders don't get silently rejected before Groq ever sees them.
+  const MAX_BINDER_CHARS = 11000;
+  const binderForPlan = binder.length > MAX_BINDER_CHARS
+    ? binder.slice(0, MAX_BINDER_CHARS) + '\n\n[...binder truncated for length...]'
+    : binder;
+
+  updateBinderPlan.mutate({
+    data: {
+      binder: binderForPlan,
+      update: latestUpdate.slice(0, 3900), // same guard for the update note (4000 cap)
+      todos: todos.map((todo) => todo.label),
+      completed: todos.filter((todo) => todo.done).map((todo) => todo.label),
+    },
+  }, {
       onSuccess: (result) => {
         setTodos((current) => {
           const completedLabels = new Set(result.completed);
