@@ -224,17 +224,12 @@ type BinderStructureAnalysisResult = {
 // ============================================
 
 const GEMINI_FORMAT_INSTRUCTIONS = `Contents will be in the form of LETTER, LETTER.NUMBER, or LETTER.NUMBER.NUMBER, UNLESS it is in a table of contents, which will ALWAYS be in the form of LETTER0 (e.g. A0, B0). Never treat a LETTER0 line as a real section — it only marks a table-of-contents entry and should be ignored when building the outline.`;
-
 const TOC_MARKER_PATTERN = /^[A-Za-z]+0$/;
 const CODED_HEADING_PATTERN = /^([A-Za-z]{1,2}\d+(?:\.\d+)*)\.?\s+(.+)$/;
 const BARE_LETTER_HEADING_PATTERN = /^([A-Za-z])\.\s+(.+)$/;
 const MAX_HEADING_WORDS = 14;
 const PIN_PATTERN = /^\d{4,8}$/;
-// Minimum spacing between sequential Groq calls during binder analysis, so we
-// stay comfortably under free-tier rate limits (roughly 15 requests/minute).
 const GEMINI_REQUEST_DELAY_MS = 20000;
-// Minimum gap enforced client-side between chat questions, so rapid-fire
-// messages don't immediately trip Groq's per-minute rate limit.
 const CHAT_COOLDOWN_MS = 20000;
 
 const queryClient = new QueryClient();
@@ -245,7 +240,7 @@ const BASE_NOTES_KEY = 'science-research-notes';
 const BASE_TODO_KEY = 'dynamic-planet-todos';
 const BASE_UPDATES_KEY = 'dynamic-planet-updates';
 const BASE_BINDER_KEY = 'project-dynamic-binder';
-const BASE_TOC_ANALYSIS_KEY = 'TOC_ANALYSIS_KEY';
+const BASE_TOC_ANALYSIS_KEY = 'TOC_ANALYSIS_KEY';  // <-- This must be defined here
 const BASE_CHAT_KEY = 'project-dynamic-chat';
 const ACTIVE_PIN_KEY = 'project-dynamic-pin';
 
