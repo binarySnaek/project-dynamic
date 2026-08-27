@@ -2871,9 +2871,10 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
           priority: n.status === 'missing' ? 'high' : 'medium',
         }));
 
-        setGapAnalysis(gaps);
-        setTocAnalysis({ nodes: updatedNodes, summary: { total: flat.length, complete, partial, missing } });
-        window.localStorage.setItem(TOC_ANALYSIS_KEY, JSON.stringify({ nodes: updatedNodes, summary: { total: flat.length, complete, partial, missing } }));
+       setGapAnalysis(gaps);
+setTocAnalysis({ nodes: updatedNodes, summary: { total: flat.length, complete, partial, missing } });
+const keys = getStorageKeys(pin);
+window.localStorage.setItem(keys.TOC_ANALYSIS_KEY, JSON.stringify({ nodes: updatedNodes, summary: { total: flat.length, complete, partial, missing } }));
 
         const statusText = sectionResult.status === 'complete' ? 'Complete! ✨' : 
                            sectionResult.status === 'partial' ? 'Has gaps (check the tooltip)' : 'Missing (needs work)';
