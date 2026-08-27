@@ -23,11 +23,11 @@ const __dirname = path.dirname(__filename);
 // Serve static files from the React build (adjust path as needed)
 // Serve static files from the React build
 // Serve static files - temporarily disabled
-// const frontendDist = path.resolve(__dirname, '../../science-research-portal/dist');
+// const frontendDist = path.resolve(__dirname, '../../science-research-portal/dist/public');
 // app.use(express.static(frontendDist));
 
 // Catch-all route for now - just return a simple message
-const frontendDist = path.resolve(__dirname, '../../science-research-portal/dist');
+const frontendDist = path.resolve(__dirname, '../../science-research-portal/dist/public');
 app.use(express.static(frontendDist));
 
 app.get(/.*/, (req, res) => {
