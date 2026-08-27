@@ -1137,6 +1137,10 @@ function ChatInterface({
 // SECTION MANAGER COMPONENT
 // ============================================
 
+// ============================================
+// SECTION MANAGER COMPONENT
+// ============================================
+
 function SectionManager({ 
   tocAnalysis, 
   onUpdateToc,
@@ -1146,10 +1150,18 @@ function SectionManager({
   onUpdateToc: (newToc: TocAnalysis) => void;
   onReevaluate: (code: string, content?: string) => void;
 }) {
-  // ... state for modals, etc. (same as before)
+  const [newSectionTitle, setNewSectionTitle] = useState('');
+  const [newSectionContent, setNewSectionContent] = useState('');
+  const [insertAfter, setInsertAfter] = useState<string | null>(null);
+  const [replaceContent, setReplaceContent] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showReplaceModal, setShowReplaceModal] = useState(false);
+  const [selectedSection, setSelectedSection] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [feedback, setFeedback] = useState('');
 
   // Helper: flatten TOC nodes to a list with depth info
-  const flattenToc = (nodes: TocNode[], depth: number = 0): { node: TocNode; depth: number; }[] => {
+  const flattenToc = (nodes: TocNode[], depth: number = 0): { node: TocNode; depth: number }[] => {
     let result: { node: TocNode; depth: number }[] = [];
     for (const node of nodes) {
       result.push({ node, depth });
@@ -1162,516 +1174,389 @@ function SectionManager({
 
   const flatList = tocAnalysis ? flattenToc(tocAnalysis.nodes) : [];
 
-  // Insert a new section after a given node
-  const insertSectionInToc = (afterCode: string | null, title: string, body: string = ''): TocNode[] => {
-    if (!tocAnalysis) return [];
-    // Deep clone nodes
-    const newNodes = JSON.parse(JSON.stringify(tocAnalysis.nodes)) as TocNode[];
+  // Helper to find a node and its parent path
+  const findNodeAndPath = (nodes: TocNode[], code: string): { node: TocNode; path: number[] } | null => {
+    for (let i = 0; i < nodes.length; i++) {
+      if (nodes[i].id === code) return { node: nodes[i], path: [i] };
+      if (nodes[i].children.length > 0) {
+        const result = findNodeAndPath(nodes[i].children, code);
+        if (result) return { node: result.node, path: [i, ...result.path] };
+      }
+    }
+    return null;
+  };
+
+  const handleAddSection = () => {
+    if (!newSectionTitle.trim() || !tocAnalysis) return;
+    setIsProcessing(true);
     
-    // Helper to find a node and its parent path
-    const findNodeAndPath = (nodes: TocNode[], code: string): { node: TocNode; path: number[] } | null => {
-      for (let i = 0; i < nodes.length; i++) {
-        if (nodes[i].id === code) return { node: nodes[i], path: [i] };
-        if (nodes[i].children.length > 0) {
-          const result = findNodeAndPath(nodes[i].children, code);
-          if (result) return { node: result.node, path: [i, ...result.path] };
+    try {
+      // Deep clone nodes
+      const newNodes = JSON.parse(JSON.stringify(tocAnalysis.nodes)) as TocNode[];
+      
+      // Generate new code
+      let newCode: string;
+      let parentNodes: TocNode[];
+      let insertIndex: number;
+      let depth: number;
+
+      if (!insertAfter) {
+        // Insert at beginning
+        const firstNode = newNodes[0];
+        if (firstNode) {
+          const parts = parseSectionCode(firstNode.id);
+          newCode = generateSectionCode(parts.letter, [1]);
+          parentNodes = newNodes;
+          insertIndex = 0;
+          depth = 1;
+        } else {
+          newCode = 'A1';
+          parentNodes = newNodes;
+          insertIndex = 0;
+          depth = 1;
+        }
+      } else {
+        const found = findNodeAndPath(newNodes, insertAfter);
+        if (!found) throw new Error(`Section ${insertAfter} not found`);
+        const node = found.node;
+        const path = found.path;
+        const parts = parseSectionCode(node.id);
+        const newNumbers = [...parts.numbers];
+        newNumbers[newNumbers.length - 1]++;
+        newCode = generateSectionCode(parts.letter, newNumbers);
+        
+        let parent: TocNode[] = newNodes;
+        for (let i = 0; i < path.length - 1; i++) {
+          parent = parent[path[i]].children;
+        }
+        const siblingIndex = path[path.length - 1];
+        parentNodes = parent;
+        insertIndex = siblingIndex + 1;
+        depth = node.level === 'section' ? 1 : node.level === 'subsection' ? 2 : 3;
+      }
+
+      // Create new node
+      const newNode: TocNode = {
+        id: newCode,
+        label: `${newCode}. ${newSectionTitle.trim()}`,
+        level: depth === 1 ? 'section' : depth === 2 ? 'subsection' : 'subsubsection',
+        status: 'partial',
+        description: newSectionContent.trim() || 'New section – add content',
+        suggestion: 'Add content and re-analyze',
+        missingSubtopics: [],
+        children: [],
+      };
+
+      // Insert
+      parentNodes.splice(insertIndex, 0, newNode);
+
+      // Renumber siblings after insertion
+      const renumberSiblings = (nodes: TocNode[], startIndex: number) => {
+        if (startIndex >= nodes.length) return;
+        const baseParts = parseSectionCode(nodes[startIndex].id);
+        for (let i = startIndex; i < nodes.length; i++) {
+          const node = nodes[i];
+          const parts = parseSectionCode(node.id);
+          if (parts.letter === baseParts.letter && parts.numbers.length === baseParts.numbers.length) {
+            const newNumbers = [...baseParts.numbers];
+            newNumbers[newNumbers.length - 1] = (i - startIndex) + 1;
+            node.id = generateSectionCode(parts.letter, newNumbers);
+            node.label = `${node.id} ${node.label.replace(/^[A-Z0-9. ]+/, '').trim()}`;
+          }
+        }
+      };
+      renumberSiblings(parentNodes, insertIndex);
+
+      // Update summary
+      const flattened = flattenToc(newNodes);
+      const summary = {
+        total: flattened.length,
+        complete: flattened.filter(n => n.node.status === 'complete').length,
+        partial: flattened.filter(n => n.node.status === 'partial').length,
+        missing: flattened.filter(n => n.node.status === 'missing').length,
+      };
+      
+      onUpdateToc({ nodes: newNodes, summary });
+      
+      // Re-analyze the new section
+      onReevaluate(newCode, newSectionContent.trim() || 'New section');
+      
+      setNewSectionTitle('');
+      setNewSectionContent('');
+      setShowAddModal(false);
+      setFeedback('✅ New section added and being analyzed!');
+    } catch (error) {
+      console.error('Failed to add section:', error);
+      setFeedback('❌ Failed to add section');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDeleteSection = (code: string) => {
+    if (!confirm(`Delete section ${code} and renumber?`)) return;
+    if (!tocAnalysis) return;
+    setIsProcessing(true);
+    
+    try {
+      const newNodes = JSON.parse(JSON.stringify(tocAnalysis.nodes)) as TocNode[];
+      
+      // Find and remove the node
+      const deleteNodeAndRenumber = (nodes: TocNode[], code: string): boolean => {
+        for (let i = 0; i < nodes.length; i++) {
+          if (nodes[i].id === code) {
+            nodes.splice(i, 1);
+            // Renumber siblings after deletion
+            const baseParts = i < nodes.length ? parseSectionCode(nodes[i].id) : null;
+            if (baseParts) {
+              for (let j = i; j < nodes.length; j++) {
+                const node = nodes[j];
+                const parts = parseSectionCode(node.id);
+                if (parts.letter === baseParts.letter && parts.numbers.length === baseParts.numbers.length) {
+                  const newNumbers = [...baseParts.numbers];
+                  newNumbers[newNumbers.length - 1] = (j - i) + 1;
+                  node.id = generateSectionCode(parts.letter, newNumbers);
+                  node.label = `${node.id} ${node.label.replace(/^[A-Z0-9. ]+/, '').trim()}`;
+                }
+              }
+            }
+            return true;
+          }
+          if (nodes[i].children.length > 0) {
+            if (deleteNodeAndRenumber(nodes[i].children, code)) return true;
+          }
+        }
+        return false;
+      };
+      
+      if (!deleteNodeAndRenumber(newNodes, code)) {
+        throw new Error(`Section ${code} not found`);
+      }
+      
+      const flattened = flattenToc(newNodes);
+      const summary = {
+        total: flattened.length,
+        complete: flattened.filter(n => n.node.status === 'complete').length,
+        partial: flattened.filter(n => n.node.status === 'partial').length,
+        missing: flattened.filter(n => n.node.status === 'missing').length,
+      };
+      
+      onUpdateToc({ nodes: newNodes, summary });
+      setFeedback(`✅ Section ${code} deleted and renumbered`);
+    } catch (error) {
+      console.error('Failed to delete section:', error);
+      setFeedback('❌ Failed to delete section');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleReplaceSection = (code: string, content: string) => {
+    if (!content.trim() || !tocAnalysis) return;
+    setIsProcessing(true);
+    
+    try {
+      const newNodes = JSON.parse(JSON.stringify(tocAnalysis.nodes)) as TocNode[];
+      
+      const replaceNodeContent = (nodes: TocNode[], code: string, newContent: string): boolean => {
+        for (const node of nodes) {
+          if (node.id === code) {
+            node.description = newContent;
+            return true;
+          }
+          if (node.children.length > 0) {
+            if (replaceNodeContent(node.children, code, newContent)) return true;
+          }
+        }
+        return false;
+      };
+      
+      if (!replaceNodeContent(newNodes, code, content)) {
+        throw new Error(`Section ${code} not found`);
+      }
+      
+      const flattened = flattenToc(newNodes);
+      const summary = {
+        total: flattened.length,
+        complete: flattened.filter(n => n.node.status === 'complete').length,
+        partial: flattened.filter(n => n.node.status === 'partial').length,
+        missing: flattened.filter(n => n.node.status === 'missing').length,
+      };
+      
+      onUpdateToc({ nodes: newNodes, summary });
+      onReevaluate(code, content);
+      setShowReplaceModal(false);
+      setReplaceContent('');
+      setFeedback(`✅ Section ${code} updated and being re-analyzed!`);
+    } catch (error) {
+      console.error('Failed to replace section:', error);
+      setFeedback('❌ Failed to replace section');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const getSectionContent = (code: string) => {
+    if (!tocAnalysis) return '';
+    const findNode = (nodes: TocNode[], code: string): TocNode | null => {
+      for (const node of nodes) {
+        if (node.id === code) return node;
+        if (node.children.length > 0) {
+          const found = findNode(node.children, code);
+          if (found) return found;
         }
       }
       return null;
     };
-
-    // Generate new code
-    let newCode: string;
-    let parentNodes: TocNode[];
-    let insertIndex: number;
-    let depth: number;
-
-    if (!afterCode) {
-      // Insert at beginning
-      const firstNode = newNodes[0];
-      if (firstNode) {
-        const parts = parseSectionCode(firstNode.id);
-        newCode = generateSectionCode(parts.letter, [1]);
-        parentNodes = newNodes;
-        insertIndex = 0;
-        depth = 1;
-      } else {
-        // Empty TOC – just create A1
-        newCode = 'A1';
-        parentNodes = newNodes;
-        insertIndex = 0;
-        depth = 1;
-      }
-    } else {
-      const found = findNodeAndPath(newNodes, afterCode);
-      if (!found) throw new Error(`Section ${afterCode} not found`);
-      const node = found.node;
-      const path = found.path;
-      const parts = parseSectionCode(node.id);
-      // Increment last number
-      const newNumbers = [...parts.numbers];
-      newNumbers[newNumbers.length - 1]++;
-      newCode = generateSectionCode(parts.letter, newNumbers);
-      // Determine parent: if node has children, we insert as first child? Usually we insert as sibling after the node.
-      // We'll insert as sibling at the same level.
-      // Navigate to parent: if path.length > 1, parent is at path.slice(0, -1)
-      let parent: TocNode[] = newNodes;
-      for (let i = 0; i < path.length - 1; i++) {
-        parent = parent[path[i]].children;
-      }
-      const siblingIndex = path[path.length - 1];
-      parentNodes = parent;
-      insertIndex = siblingIndex + 1;
-      depth = node.level === 'section' ? 1 : node.level === 'subsection' ? 2 : 3;
-    }
-
-    // Create new node
-    const newNode: TocNode = {
-      id: newCode,
-      label: `${newCode}. ${title}`,
-      level: depth === 1 ? 'section' : depth === 2 ? 'subsection' : 'subsubsection',
-      status: 'partial',
-      description: body || 'New section – add content',
-      suggestion: 'Add content and re-analyze',
-      missingSubtopics: [],
-      children: [],
-    };
-
-    // Insert
-    parentNodes.splice(insertIndex, 0, newNode);
-
-    // Now renumber all sibling nodes after the insertion point at the same depth
-    // (We need to renumber the codes of all nodes that are at the same depth and after)
-    const renumberSiblings = (nodes: TocNode[], startIndex: number, baseCode: string) => {
-      const baseParts = parseSectionCode(baseCode);
-      for (let i = startIndex; i < nodes.length; i++) {
-        const node = nodes[i];
-        const parts = parseSectionCode(node.id);
-        if (parts.letter === baseParts.letter && parts.numbers.length === baseParts.numbers.length) {
-          // renumber this node and its descendants? Only the top-level code matters for siblings.
-          const newNumbers = [...baseParts.numbers];
-          newNumbers[newNumbers.length - 1] = (i - startIndex) + 1;
-          // But we need to keep higher-level numbers from the original
-          // Actually we should base on the first node's numbers, but we want sequential numbers.
-          // Simpler: we'll just regenerate from the first node's numbers plus offset.
-          const firstParts = parseSectionCode(nodes[startIndex].id);
-          const newNum = [...firstParts.numbers];
-          newNum[newNum.length - 1] = (i - startIndex) + 1;
-          node.id = generateSectionCode(parts.letter, newNum);
-          // Update label too
-          node.label = `${node.id} ${node.label.replace(/^[A-Z0-9. ]+/, '').trim()}`;
-        }
-      }
-    };
-
-    // Renumber siblings after insertion point
-    renumberSiblings(parentNodes, insertIndex, newCode);
-
-    // Update summary and return
-    const flattened = flattenToc(newNodes);
-    const summary = {
-      total: flattened.length,
-      complete: flattened.filter(n => n.node.status === 'complete').length,
-      partial: flattened.filter(n => n.node.status === 'partial').length,
-      missing: flattened.filter(n => n.node.status === 'missing').length,
-    };
-    onUpdateToc({ nodes: newNodes, summary });
-    return newNodes;
+    const node = findNode(tocAnalysis.nodes, code);
+    return node?.description || '';
   };
 
-  // Similarly, implement delete and replace using similar logic (omitted for brevity, but you can adapt)
-
-  // In the UI, use flatList to display sections with indentation based on depth.
-  // Use the same Add/Delete/Replace modals, but they call these new functions.
-}
-
-// ============================================
-// TOC SIDEBAR COMPONENT (for Research tab)
-// ============================================
-
-function TocSidebar({ toc, onNodeHover, hoveredNode, onSectionClick, isFullSize = false, onReevaluate, isReevaluating, reevaluateTarget }: { 
-  toc: TocAnalysis; 
-  onNodeHover: (node: TocNode | null) => void;
-  hoveredNode: TocNode | null;
-  onSectionClick?: (sectionLabel: string) => void;
-  isFullSize?: boolean;
-  onReevaluate?: (sectionCode: string, content?: string) => void;
-  isReevaluating?: boolean;
-  reevaluateTarget?: string | null;
-}) {
-  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['root']));
-  const [isTooltipHovered, setIsTooltipHovered] = useState(false);
-  const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const toggleExpand = (id: string) => {
-    setExpandedNodes(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'complete': return '#3b82f6';
-      case 'partial': return '#eab308';
-      case 'missing': return '#ef4444';
-      default: return '#6b7280';
-    }
-  };
-
-  const getStatusEmoji = (status: string) => {
-    switch (status) {
-      case 'complete': return '✅';
-      case 'partial': return '🟡';
-      case 'missing': return '🔴';
-      default: return '📄';
-    }
-  };
-
-  const getCelebrationEmoji = (status: string) => {
-    if (status === 'complete') {
-      const emojis = ['🎉', '🌟', '✨', '💫', '🏆', '⭐', '👏', '🎊'];
-      return emojis[Math.floor(Math.random() * emojis.length)];
-    }
-    return '';
-  };
-
-  const handleNodeClick = (node: TocNode) => {
-    if (onSectionClick) {
-      onSectionClick(node.label);
-    }
-  };
-
-  const renderNode = (node: TocNode, depth: number = 0) => {
-    const isExpanded = expandedNodes.has(node.id);
-    const hasChildren = node.children && node.children.length > 0;
-    const isLeaf = !hasChildren;
-
-    if (isLeaf) {
-      const color = getStatusColor(node.status);
-      const emoji = getStatusEmoji(node.status);
-      const celebration = getCelebrationEmoji(node.status);
-      const isHovered = hoveredNode?.id === node.id;
-
-      return (
-        <div 
-          key={node.id}
-          className="toc-leaf"
-          style={{
-            paddingLeft: `${depth * 16 + 8}px`,
-            borderLeft: `3px solid ${color}`,
-            background: isHovered ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
-            borderRadius: '6px',
-            transition: 'background 0.2s ease',
-            cursor: 'pointer',
-            position: 'relative',
-          }}
-          onMouseEnter={() => {
-            // Clear any pending close timeout
-            if (closeTimeoutRef.current) {
-              clearTimeout(closeTimeoutRef.current);
-              closeTimeoutRef.current = null;
-            }
-            onNodeHover(node);
-          }}
-          onMouseLeave={() => {
-            // Don't close immediately - wait to see if mouse goes to tooltip
-            closeTimeoutRef.current = setTimeout(() => {
-              // Only close if the mouse is not hovering the tooltip
-              if (!isTooltipHovered) {
-                onNodeHover(null);
-              }
-              closeTimeoutRef.current = null;
-            }, 400);
-          }}
-          onClick={() => handleNodeClick(node)}
-        >
-          <div className="flex items-center gap-2 py-1.5 px-2 text-sm">
-            <span>{emoji}</span>
-            <span className="flex-1 truncate">{node.label}</span>
-            {celebration && <span className="text-xs animate-pulse">{celebration}</span>}
-            {node.status !== 'complete' && (
-              <span style={{
-                fontSize: '9px',
-                padding: '1px 8px',
-                borderRadius: '12px',
-                background: node.status === 'partial' ? 'rgba(234, 179, 8, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                color: node.status === 'partial' ? '#eab308' : '#ef4444',
-                whiteSpace: 'nowrap',
-              }}>
-                {node.status === 'partial' ? '⚠️ Has gaps' : '❌ Missing'}
-              </span>
-            )}
-            {/* Re-evaluate button */}
-            {isReevaluating && reevaluateTarget === node.id ? (
-              <span style={{
-                fontSize: '9px',
-                padding: '2px 8px',
-                borderRadius: '12px',
-                background: 'hsl(var(--accent) / 0.15)',
-                color: 'hsl(var(--accent))',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-              }}>
-                <span className="thinking-dot" style={{ fontSize: '6px' }}>●</span>
-                Analyzing...
-              </span>
-            ) : (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onReevaluate) {
-                        // Extract the code from the label - handles "A.", "A1.", "A1.1.", etc.
-                        let codeToUse = node.id;
-                        const codeMatch = node.label.match(/^([A-Z][0-9.]*)/);
-                        if (codeMatch) {
-                          codeToUse = codeMatch[1];
-                          // Keep the trailing dot if it exists (e.g., "A." -> "A.", "A1." -> "A1.")
-                          // But remove trailing dot for top-level sections that might be stored as "A"
-                          // Let's keep it as-is since the reevaluate function will handle all variations
-                        }
-                        console.log('🔍 Re-evaluate clicked for:', node.label, '-> extracted code:', codeToUse);
-                        onReevaluate(codeToUse);
-                      }
-                    }}
-                style={{
-                  fontSize: '10px',
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                  border: '1px solid hsl(var(--border))',
-                  background: 'transparent',
-                  color: 'hsl(var(--muted-foreground))',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'hsl(var(--primary) / 0.1)';
-                  e.currentTarget.style.borderColor = 'hsl(var(--primary))';
-                  e.currentTarget.style.color = 'hsl(var(--primary))';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.borderColor = 'hsl(var(--border))';
-                  e.currentTarget.style.color = 'hsl(var(--muted-foreground))';
-                }}
-                title="Re-evaluate this section with Groq"
-              >
-                🔄
-              </button>
-            )}
-          </div>
-        </div>
-      );
-    }
-
+  if (!tocAnalysis || flatList.length === 0) {
     return (
-      <div key={node.id}>
-        <div 
-          className="toc-parent"
-          style={{
-            paddingLeft: `${depth * 16 + 8}px`,
-            cursor: 'pointer',
-            borderRadius: '6px',
-            transition: 'background 0.2s ease',
-          }}
-          onClick={() => toggleExpand(node.id)}
-          onMouseEnter={() => onNodeHover(node)}
-          onMouseLeave={() => onNodeHover(null)}
-        >
-          <div className="flex items-center gap-2 py-1.5 px-2 text-sm font-medium hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md">
-            <span className="text-xs transition-transform duration-200" style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
-              ▶
-            </span>
-            <span>{node.label}</span>
-            <span className="text-xs text-gray-400 ml-auto">
-              {node.children.filter(c => c.status === 'complete').length}/{node.children.length}
-            </span>
-          </div>
-        </div>
-        {isExpanded && (
-          <div className="toc-children">
-            {node.children.map(child => renderNode(child, depth + 1))}
-          </div>
-        )}
+      <div style={{ textAlign: 'center', padding: '40px 20px', color: 'hsl(var(--muted-foreground))' }}>
+        <Book size={32} style={{ opacity: 0.2, marginBottom: '12px' }} />
+        <p>No sections to manage. Upload a binder first.</p>
       </div>
     );
-  };
+  }
 
   return (
-    <div className="toc-sidebar" style={{
-      position: 'relative',
-      maxHeight: isFullSize ? '600px' : 'calc(100vh - 120px)',
-      overflowY: 'auto',
-      padding: isFullSize ? '0' : '16px 12px',
-      background: isFullSize ? 'transparent' : 'hsl(var(--card) / 0.6)',
-      borderRadius: isFullSize ? '0' : '20px',
-      border: isFullSize ? 'none' : '1px solid hsl(var(--card-border))',
-      backdropFilter: isFullSize ? 'none' : 'blur(10px)',
-    }}>
-      {!isFullSize && (
-        <div className="toc-header mb-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold">📑 Binder TOC</h3>
-            <div className="flex gap-2 text-xs">
-              <span style={{ color: '#3b82f6' }}>● {toc.summary.complete}</span>
-              <span style={{ color: '#eab308' }}>● {toc.summary.partial}</span>
-              <span style={{ color: '#ef4444' }}>● {toc.summary.missing}</span>
+    <div className="section-manager">
+      <div className="section-manager-header">
+        <h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0 }}>📑 Section Manager</h3>
+        <button 
+          className="primary-button" 
+          onClick={() => { setInsertAfter(null); setShowAddModal(true); }}
+          disabled={isProcessing}
+          style={{ fontSize: '11px', padding: '4px 12px' }}
+        >
+          <Plus size={14} /> Add Section
+        </button>
+      </div>
+
+      <div className="section-list" style={{ marginTop: '12px' }}>
+        {flatList.map(({ node, depth }) => (
+          <div 
+            key={node.id}
+            className="section-item"
+            style={{ 
+              paddingLeft: `${depth * 20 + 8}px`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              borderBottom: '1px solid hsl(var(--border) / 0.3)',
+            }}
+          >
+            <span style={{ 
+              fontWeight: 600, 
+              color: node.status === 'complete' ? '#22c55e' : node.status === 'partial' ? '#eab308' : '#ef4444',
+              minWidth: '40px', 
+              fontFamily: 'monospace', 
+              fontSize: '13px' 
+            }}>
+              {node.id}
+            </span>
+            <span style={{ flex: 1, fontSize: '13px' }}>{node.label.replace(/^[A-Z0-9. ]+/, '').trim()}</span>
+            <span style={{ fontSize: '10px', color: 'hsl(var(--muted-foreground))' }}>
+              {node.status === 'complete' ? '✅' : node.status === 'partial' ? '🟡' : '🔴'}
+            </span>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <button 
+                className="icon-button"
+                onClick={() => { setInsertAfter(node.id); setShowAddModal(true); }}
+                disabled={isProcessing}
+                style={{ padding: '4px 8px', background: 'transparent', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', opacity: 0.6 }}
+                title="Insert after this section"
+              >
+                ➕
+              </button>
+              <button 
+                className="icon-button"
+                onClick={() => { setSelectedSection(node.id); setReplaceContent(getSectionContent(node.id)); setShowReplaceModal(true); }}
+                disabled={isProcessing}
+                style={{ padding: '4px 8px', background: 'transparent', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', opacity: 0.6 }}
+                title="Replace section content"
+              >
+                ✏️
+              </button>
+              <button 
+                className="icon-button delete"
+                onClick={() => handleDeleteSection(node.id)}
+                disabled={isProcessing}
+                style={{ padding: '4px 8px', background: 'transparent', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', opacity: 0.6 }}
+                title="Delete this section"
+              >
+                🗑️
+              </button>
             </div>
           </div>
-          <div className="flex gap-3 mt-2 text-[10px] text-gray-400">
-            <span>🔵 Complete</span>
-            <span>🟡 Has gaps</span>
-            <span>🔴 Missing</span>
-          </div>
-          <div style={{ fontSize: '9px', color: 'hsl(var(--muted-foreground))', marginTop: '4px', opacity: 0.6 }}>
-            Click any section to ask about it
+        ))}
+      </div>
+
+      {/* Add Section Modal */}
+      {showAddModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }} onClick={() => setShowAddModal(false)}>
+          <div className="modal" style={{ background: 'hsl(var(--card))', borderRadius: '16px', padding: '24px', maxWidth: '500px', width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={(e) => e.stopPropagation()}>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: '18px' }}>Add New Section</h4>
+            <p style={{ fontSize: '12px', color: 'hsl(var(--muted-foreground))' }}>
+              {insertAfter ? `Insert after: ${insertAfter}` : 'Insert at beginning'}
+            </p>
+            <input
+              value={newSectionTitle}
+              onChange={(e) => setNewSectionTitle(e.target.value)}
+              placeholder="Section title (e.g., 'Glacier Formation')"
+              className="modal-input"
+              autoFocus
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid hsl(var(--input))', borderRadius: '8px', background: 'hsl(var(--background))', color: 'hsl(var(--foreground))', fontSize: '14px', margin: '8px 0 16px 0', fontFamily: 'inherit' }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && newSectionTitle.trim()) handleAddSection(); if (e.key === 'Escape') setShowAddModal(false); }}
+            />
+            <textarea
+              value={newSectionContent}
+              onChange={(e) => setNewSectionContent(e.target.value)}
+              placeholder="Section content (optional)"
+              rows={4}
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid hsl(var(--input))', borderRadius: '8px', background: 'hsl(var(--background))', color: 'hsl(var(--foreground))', fontSize: '14px', margin: '8px 0 16px 0', fontFamily: 'inherit', resize: 'vertical', minHeight: '80px' }}
+            />
+            <div className="modal-actions" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button className="outline-button" onClick={() => setShowAddModal(false)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid hsl(var(--border))', background: 'transparent', color: 'hsl(var(--foreground))', cursor: 'pointer' }}>Cancel</button>
+              <button className="primary-button" onClick={handleAddSection} disabled={!newSectionTitle.trim() || isProcessing} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', cursor: 'pointer' }}>
+                {isProcessing ? '⏳ Adding...' : 'Add & Analyze'}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="toc-tree">
-        {toc.nodes.map(node => renderNode(node, 0))}
-      </div>
-
-      {/* Tooltip Popup - shows when hovering over a section in the Binder tab */}
-      {/* Tooltip Popup - shows when hovering over a section in the Binder tab */}
-      {/* Tooltip Popup - shows when hovering over a section in the Binder tab */}
-      {hoveredNode && hoveredNode.status !== 'complete' && isFullSize && (
-          <div 
-            className="toc-tooltip" 
-            style={{
-              position: 'fixed',
-              top: '50%',
-              right: '40px',
-              transform: 'translateY(-50%)',
-              maxWidth: '380px',
-              width: '100%',
-              padding: '16px 20px',
-              background: 'hsl(var(--card))',
-              borderRadius: '16px',
-              border: '1px solid hsl(var(--card-border))',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
-              zIndex: 1000,
-              backdropFilter: 'blur(20px)',
-            }}
-            onMouseEnter={() => {
-              // Clear any pending close timeout
-              if (closeTimeoutRef.current) {
-                clearTimeout(closeTimeoutRef.current);
-                closeTimeoutRef.current = null;
-              }
-              setIsTooltipHovered(true);
-            }}
-            onMouseLeave={() => {
-              setIsTooltipHovered(false);
-              // Close the tooltip after a short delay when leaving
-              closeTimeoutRef.current = setTimeout(() => {
-                onNodeHover(null);
-                closeTimeoutRef.current = null;
-              }, 200);
-            }}
-          >
-          <div className="flex items-start gap-3">
-            <span className="text-2xl">
-              {hoveredNode.status === 'partial' ? '📝' : '🔍'}
-            </span>
-            <div>
-              <div className="font-semibold text-sm">{hoveredNode.label}</div>
-              {hoveredNode.status === 'partial' && hoveredNode.missingSubtopics && hoveredNode.missingSubtopics.length > 0 && (
-                <div className="text-xs mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-md">
-                  <div className="font-semibold text-yellow-700 dark:text-yellow-300">Missing subtopics:</div>
-                  <ul className="list-disc pl-4 mt-1">
-                    {hoveredNode.missingSubtopics.map((topic, idx) => (
-                      <li key={idx}>{topic}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {hoveredNode.suggestion && (
-                <div className="text-xs mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-md">
-                  💡 {hoveredNode.suggestion}
-                </div>
-              )}
-
-              {/* Re-evaluate button inside tooltip */}
-              <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onReevaluate) {
-                      let codeToUse = hoveredNode.id;
-                      const codeMatch = hoveredNode.label.match(/^([A-Z][0-9.]*)/);
-                      if (codeMatch) {
-                        codeToUse = codeMatch[1];
-                        codeToUse = codeToUse.replace(/\.$/, '');
-                      }
-                      // ============================================
-                      // PASS THE BINDER CONTENT TO GROQ
-                      // ============================================
-                      const content = hoveredNode.description || '';
-                      console.log('🔍 Re-evaluate from tooltip:', {
-                        label: hoveredNode.label,
-                        code: codeToUse,
-                        contentLength: content.length,
-                        contentPreview: content.slice(0, 200)
-                      });
-                      // Pass both the code and the content
-                      onReevaluate(codeToUse, content);
-                      setTimeout(() => {
-                        onNodeHover(null);
-                      }, 500);
-                    }
-                  }}
-                style={{
-                  marginTop: '10px',
-                  fontSize: '11px',
-                  padding: '5px 14px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  background: 'hsl(var(--primary))',
-                  color: 'hsl(var(--primary-foreground))',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  fontWeight: 500,
-                  width: '100%',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'hsl(var(--primary-dark))';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'hsl(var(--primary))';
-                }}
-              >
-                🔄 Re-evaluate this section
+      {/* Replace Section Modal */}
+      {showReplaceModal && selectedSection && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }} onClick={() => setShowReplaceModal(false)}>
+          <div className="modal" style={{ background: 'hsl(var(--card))', borderRadius: '16px', padding: '24px', maxWidth: '500px', width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={(e) => e.stopPropagation()}>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: '18px' }}>Replace Content: {selectedSection}</h4>
+            <textarea
+              value={replaceContent}
+              onChange={(e) => setReplaceContent(e.target.value)}
+              placeholder="Paste new content for this section..."
+              rows={6}
+              className="modal-textarea"
+              autoFocus
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid hsl(var(--input))', borderRadius: '8px', background: 'hsl(var(--background))', color: 'hsl(var(--foreground))', fontSize: '14px', margin: '8px 0 16px 0', fontFamily: 'inherit', resize: 'vertical', minHeight: '120px' }}
+            />
+            <div className="modal-actions" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button className="outline-button" onClick={() => setShowReplaceModal(false)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid hsl(var(--border))', background: 'transparent', color: 'hsl(var(--foreground))', cursor: 'pointer' }}>Cancel</button>
+              <button className="primary-button" onClick={() => handleReplaceSection(selectedSection, replaceContent)} disabled={isProcessing} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', cursor: 'pointer' }}>
+                {isProcessing ? '⏳ Updating...' : 'Replace & Re-analyze'}
               </button>
             </div>
           </div>
-          {/* Close button */}
-          <button
-            onClick={() => {
-              if (window.tooltipTimeout) {
-                clearTimeout(window.tooltipTimeout);
-                window.tooltipTimeout = null;
-              }
-              onNodeHover(null);
-            }}
-            style={{
-              position: 'absolute',
-              top: '8px',
-              right: '8px',
-              background: 'none',
-              border: 'none',
-              color: 'hsl(var(--muted-foreground))',
-              cursor: 'pointer',
-              fontSize: '14px',
-            }}
-          >
-            ✕
-          </button>
+        </div>
+      )}
+      
+      {feedback && (
+        <div style={{ marginTop: '12px', padding: '8px 12px', borderRadius: '8px', background: 'hsl(var(--muted) / 0.3)', fontSize: '12px' }}>
+          {feedback}
         </div>
       )}
     </div>
@@ -1912,9 +1797,9 @@ function BinderSetup({ onComplete, initialValue = '', theme }: {
           Built with 💙 by{' '}
           <strong style={{ color: safeTheme.primary }}>DeepSeek</strong>
           {' '}·{' '}
-          <strong style={{ color: safeTheme.primary }}>Agent from Replit</strong>
+          <strong style={{ color: safeTheme.primary }}>Claude</strong>
           {' '}· and{' '}
-          <strong style={{ color: safeTheme.primary }}>you</strong> 🚀
+          <strong style={{ color: safeTheme.primary }}>Groq</strong> 
         </p>
         <p style={{ fontSize: '10px', color: `${safeTheme.mutedText || '#5a7a9a'}99`, margin: '4px 0 0' }}>
           Special thanks to the Science Olympiad community
