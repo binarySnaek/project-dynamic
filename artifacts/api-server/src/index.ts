@@ -27,8 +27,11 @@ const __dirname = path.dirname(__filename);
 // app.use(express.static(frontendDist));
 
 // Catch-all route for now - just return a simple message
+const frontendDist = path.resolve(__dirname, '../../science-research-portal/dist');
+app.use(express.static(frontendDist));
+
 app.get(/.*/, (req, res) => {
-  res.json({ message: 'API server is running. Frontend not served yet.' });
+  res.sendFile(path.join(frontendDist, 'index.html'));
 });
 app.listen(port, (err) => {
   if (err) {
