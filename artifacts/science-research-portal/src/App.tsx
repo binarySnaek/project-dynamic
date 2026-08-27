@@ -2884,6 +2884,48 @@ const handleTocUpdate = (newTocAnalysis: TocAnalysis) => {
   window.localStorage.setItem(keys.TOC_ANALYSIS_KEY, JSON.stringify(newTocAnalysis));
   setFeedback('📋 Binder structure updated!');
 };
+  const forceRefreshToc = () => {
+  if (!skeletonLines.length) {
+    setFeedback('⚠️ No skeleton data to refresh from.');
+    return;
+  }
+  
+  // Build statuses from existing TOC if available
+  const statuses = new Map();
+  if (tocAnalysis) {
+    const flatten = (nodes: TocNode[]): TocNode[] => 
+      nodes.flatMap((n) => [n, ...flatten(n.children)]);
+    const flat = flatten(tocAnalysis.nodes);
+    flat.forEach(node => {
+      statuses.set(node.id, {
+        status: node.status,
+        note: node.suggestion || '',
+        missingSubtopics: node.missingSubtopics || [],
+      });
+    });
+  }
+  
+  // Rebuild TOC tree from skeletonLines
+  const updatedNodes = buildTocTree(skeletonLines, statuses);
+  const flatten2 = (list: TocNode[]): TocNode[] => 
+    list.flatMap((n) => [n, ...flatten2(n.children)]);
+  const flat2 = flatten2(updatedNodes);
+  
+  const newToc = { 
+    nodes: updatedNodes, 
+    summary: { 
+      total: flat2.length, 
+      complete: flat2.filter(n => n.status === 'complete').length, 
+      partial: flat2.filter(n => n.status === 'partial').length, 
+      missing: flat2.filter(n => n.status === 'missing').length 
+    } 
+  };
+  
+  setTocAnalysis(newToc);
+  const keys = getStorageKeys(pin);
+  window.localStorage.setItem(keys.TOC_ANALYSIS_KEY, JSON.stringify(newToc));
+  setFeedback('🔄 TOC refreshed from skeleton!');
+};
   // ============================================
   // HANDLE SKELETON UPDATE
   // ============================================
@@ -3093,7 +3135,7 @@ const handleTocUpdate = (newTocAnalysis: TocAnalysis) => {
   // HANDLE BINDER COMPLETE
   // ============================================
  
-
+  
   // ============================================
   // RENDER: MAIN WORKSPACE
   // ============================================
