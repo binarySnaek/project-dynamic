@@ -3265,7 +3265,7 @@ function Home({ pin, onForgetPin }: { pin: string; onForgetPin: () => void }) {
               TAB: RESEARCH
               ============================================ */}
           {activeTab === 'research' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '20px', height: '100%' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: '16px', height: '100%' }}>
               {/* Chat Area */}
               <div>
                 <section className="question-card" id="question-desk" style={{
