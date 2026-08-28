@@ -273,6 +273,7 @@ You should be as harsh as possible. If something is missing, be specific.
 
 When marking the erros in the section, make sure to list the edits as clear bullet points, and all of the points as clear steps. For instance, do not say "go more in depth about classification of sdeiment sizes.," say "add wentworth scale table."
 Also, speak in a langauge that an average middle-school can understand. So, don't explain like they are 5, but also don't use like really complex grammer either.
+Now, keep in mind this is a middle-school level science olympiad binder. there is a line between being way to niche and finding missing things in a binder. try to find a middle ground. thanks.
 Return ONLY valid JSON:
 {
   "code": "${section.code || 'unknown'}",
