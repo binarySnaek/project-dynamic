@@ -229,8 +229,8 @@ const CODED_HEADING_PATTERN = /^([A-Za-z]{1,2}\d+(?:\.\d+)*)\.?\s+(.+)$/;
 const BARE_LETTER_HEADING_PATTERN = /^([A-Za-z])\.\s+(.+)$/;
 const MAX_HEADING_WORDS = 14;
 const PIN_PATTERN = /^\d{4,8}$/;
-const GEMINI_REQUEST_DELAY_MS = 20000;
-const CHAT_COOLDOWN_MS = 20000;
+const GEMINI_REQUEST_DELAY_MS = 30000;
+const CHAT_COOLDOWN_MS = 30000;
 
 const queryClient = new QueryClient();
 
