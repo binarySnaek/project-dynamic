@@ -251,7 +251,8 @@ Determine if this section is COMPLETE, PARTIAL.
 If PARTIAL , suggest what's missing.
 
 You should try to be as harsh as possible, though if something is missing, please be speciific. You cannot just say missing comparison tables or something. If a piece of knowledge is specfically missing, mention it. If you can only mark like 1 or 2 missing things, and they are like very minor things, mark it as complete, it is close enough, though maybe put a warning sign next to it. If there are 3 or more missing things, then mark it as partial, and list every SPECIC thing wrong with it. There are no diagrams/visual aids because thie input on this thing text...so...if it mentions a diagram assume there is a diagram. Thanks. When replying to anything, amke sure to be super ultra specific to like essentially tell the user what they are exactly missing. Like if they are missing depth in A, tell them to add what they missed in A. 
-Anyways, yeah, in the notes section, if you decide it is partial, put 3 or more CLEAR OBJECTIVES on what to add or fix. ok? Also remmeber that this is just a subtopic, you should not flame the user to not including things that woldn't make sense in hte category.
+Anyways, yeah, in the notes section, if you decide it is partial, put 3 or more CLEAR OBJECTIVES on what to add or fix. ok? Also remmeber that this is just a subtopic, you should not flame the user to not including things that woldn't make sense in hte category. Really make sure that they indeed to not have it. Again, be ultra specific! You cannot just say "add further detail of sizes" Instead, say something like "add wentworth scale table."
+
 
 Return ONLY valid JSON:
 {
