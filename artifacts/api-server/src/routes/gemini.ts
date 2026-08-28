@@ -238,29 +238,48 @@ router.post("/gemini/binder-structure", async (req, res) => {
     for (let i = 0; i < Math.min(finalSections.length, 5); i++) {
       const section = finalSections[i];
       console.log(`🔍 Processing section ${i+1}/${Math.min(finalSections.length, 5)}: ${section.code || 'unknown'}`);
+// In /gemini/binder-structure route, before the loop:
 
-     const prompt = `
+// Build exoskeleton string from all sections
+const exoskeleton = finalSections
+  .map(s => `${s.code}. ${s.title}`)
+  .join('\n');
+
+// Inside the loop, modify the prompt:
+const prompt = `
 Analyze this ONE binder section:
 
 Code: ${section.code || 'unknown'}
 Title: ${section.title || 'Untitled'}
-Content:
+
+**HERE IS THE FULL BINDER EXOSKELETON (all sections):**
+${exoskeleton}
+
+Content of THIS section:
 ${(section.body || '').slice(0, 2000)}
 
-Determine if this section is COMPLETE, PARTIAL.
-If PARTIAL , suggest what's missing.
+Determine if this section is COMPLETE, PARTIAL, or MISSING.
+If PARTIAL or MISSING, suggest what's missing.
 
-You should try to be as harsh as possible, though if something is missing, please be speciific. You cannot just say missing comparison tables or something. If a piece of knowledge is specfically missing, mention it. If you can only mark like 1 or 2 missing things, and they are like very minor things, mark it as complete, it is close enough, though maybe put a warning sign next to it. If there are 3 or more missing things, then mark it as partial, and list every SPECIC thing wrong with it. There are no diagrams/visual aids because thie input on this thing text...so...if it mentions a diagram assume there is a diagram. Thanks. When replying to anything, amke sure to be super ultra specific to like essentially tell the user what they are exactly missing. Like if they are missing depth in A, tell them to add what they missed in A. 
-Anyways, yeah, in the notes section, if you decide it is partial, put 3 or more CLEAR OBJECTIVES on what to add or fix. ok? Also remmeber that this is just a subtopic, you should not flame the user to not including things that woldn't make sense in hte category. Really make sure that they indeed to not have it. Again, be ultra specific! You cannot just say "add further detail of sizes" Instead, say something like "add wentworth scale table."
+IMPORTANT RULES:
+1. **Do NOT suggest adding a new section that already exists** in the exoskeleton above.
+2. **Do NOT suggest adding a topic that belongs to another section** (e.g., don't suggest "add sediments" if there's already a "Sediments" section).
+3. Be ULTRA SPECIFIC about what's missing in THIS section only.
+4. Only suggest new sections if they are genuinely new topics not covered anywhere in the exoskeleton.
 
+You should be as harsh as possible. If something is missing, be specific. 
+- If you can only mark 1-2 missing minor things, mark it as COMPLETE.
+- If there are 3+ missing things, mark it as PARTIAL.
+
+When marking the erros in the section, make sure to list the edits as clear bullet points, and all of the points as clear steps. For instance, do not say "go more in depth about classification of sdeiment sizes.," say "add wentworth scale table."
 
 Return ONLY valid JSON:
 {
   "code": "${section.code || 'unknown'}",
-  "status": "complete|partial",
-  "note": "Brief note on this section",
-  "missingSubtopics": ["concept 1", "concept 2"],
-  "newSections": ["New Section Title"]
+  "status": "complete|partial|missing",
+  "note": "Brief, specific note",
+  "missingSubtopics": ["specific concept 1", "specific concept 2"],
+  "newSections": ["Completely New Topic (only if not in exoskeleton)"]
 }`;
 
       try {
