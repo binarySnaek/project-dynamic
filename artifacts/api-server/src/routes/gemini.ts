@@ -272,7 +272,7 @@ You should be as harsh as possible. If something is missing, be specific.
 - If there are 3+ missing things, mark it as PARTIAL.
 
 When marking the erros in the section, make sure to list the edits as clear bullet points, and all of the points as clear steps. For instance, do not say "go more in depth about classification of sdeiment sizes.," say "add wentworth scale table."
-
+Also, speak in a langauge that an average middle-school can understand. So, don't explain like they are 5, but also don't use like really complex grammer either.
 Return ONLY valid JSON:
 {
   "code": "${section.code || 'unknown'}",
